@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Header } from "@/components/dashboard/Header";
-import { ApolloScraperTab } from "@/components/dashboard/tabs/ApolloScraperTab";
+import {ApolloScraperTab} from "@/components/dashboard/tabs/ApolloScraperTab";
+
 import { EmailVerifierTab } from "@/components/dashboard/tabs/EmailVerifierTab";
 import { CustomListTab } from "@/components/dashboard/tabs/CustomListTab";
 import { ComingSoonTab } from "@/components/dashboard/tabs/ComingSoonTab";
