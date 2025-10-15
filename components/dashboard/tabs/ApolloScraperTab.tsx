@@ -38,6 +38,8 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 
+import { supabase } from "@/lib/supabase";
+
 interface ScraperRequest {
   id: string;
   date: string;
@@ -52,7 +54,7 @@ interface ScraperRequest {
 }
 
 interface ApolloScraperTabProps {
-  user: any; // Replace 'any' with your actual user type
+  user: any; // Use your user type here
 }
 
 export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
@@ -72,21 +74,23 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
 
   useEffect(() => {
     fetchRequests();
-  }, [user]); // refetch whenever user changes
+  }, [user]); 
 
   async function fetchRequests() {
     if (!user?.id) {
-      setRequests([]); // No user, no requests
+      setRequests([]);
       return;
     }
     setLoading(true);
     try {
-      const response = await fetch(`/api/fetch-scrape-requests?userId=${encodeURIComponent(user.id)}`);
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.message || "Failed to load requests");
-      }
-      const data = await response.json();
+      const { data, error } = await supabase
+        .from("scraper_requests")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
       setRequests(
         (data || []).map((r: any) => ({
           id: r.id,
@@ -102,23 +106,24 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
         }))
       );
     } catch (err: any) {
-      toast.error(err.message || "Invalid response from server while loading requests.");
+      toast.error(err.message || "Failed to load requests");
     } finally {
       setLoading(false);
     }
   }
 
-  // Your existing functions for handleSubmit, getStatusBadge, handleRefresh, etc.
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
+      if (!user?.id) throw new Error("User not authenticated");
+
       const response = await fetch("/api/scrape-leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, leadsCount: Number(leadsCount), fileName, fileFormat }),
+        body: JSON.stringify({ url, leadsCount: Number(leadsCount), fileName, fileFormat, user_id: user.id }),
       });
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         if (errorData?.error === "apollo_scraper_overloaded") {
@@ -126,6 +131,7 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
         } else {
           toast.error(errorData?.message || "Error submitting scraping request");
         }
+        setLoading(false);
         return;
       }
 
@@ -136,20 +142,18 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
       const pollInterval = 3000;
 
       while (attempts < maxAttempts) {
-        await new Promise((res) => setTimeout(res, pollInterval));
+        await new Promise(res => setTimeout(res, pollInterval));
         attempts++;
         await fetchRequests();
 
-        const current = requestsRef.current.find((r) => r.id === newRequest.id);
+        const current = requestsRef.current.find(r => r.id === newRequest.id);
         if (current) {
           if (current.status === "completed") {
             toast.success("Scraping completed! Download your file below.");
-            setUrl("");
-            setLeadsCount("");
-            setFileName("");
-            setFileFormat("csv");
+            resetForm();
             break;
-          } else if (current.status === "failed") {
+          }
+          else if (current.status === "failed") {
             toast.error("Scraping failed. Please try again.");
             break;
           }
@@ -160,6 +164,13 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const resetForm = () => {
+    setUrl("");
+    setLeadsCount("");
+    setFileName("");
+    setFileFormat("csv");
   };
 
   const handleRefresh = () => {
@@ -191,26 +202,21 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
   };
 
   const filtered = useMemo(() => {
-    let filteredItems = requests;
-    if (filterFileName.trim()) {
-      filteredItems = requests.filter((r) => r.fileName.toLowerCase().includes(filterFileName.toLowerCase()));
-    }
-    return filteredItems;
+    if (!filterFileName.trim()) return requests;
+    return requests.filter(r => r.fileName.toLowerCase().includes(filterFileName.toLowerCase()));
   }, [requests, filterFileName]);
 
   const totalFiltered = filtered.length;
   const totalPages = Math.ceil(totalFiltered / pageSize);
 
   const displayRequests = useMemo(() => {
-    if (!showAll) {
-      return filtered.slice(0, 10);
-    }
+    if (!showAll) return filtered.slice(0, 10);
     const startIdx = (currentPage - 1) * pageSize;
     return filtered.slice(startIdx, startIdx + pageSize);
   }, [filtered, showAll, currentPage]);
 
   return (
-     <div className="space-y-8 max-w-20xl mx-auto p-1 w-full">
+    <div className="space-y-8 max-w-8xl mx-auto p-4 w-full">
       <h2 className="text-4xl font-bold text-blue-700 mb-4">Apollo Scraper</h2>
       <p className="mb-6 text-gray-700">Extract high-quality leads from Apollo with precision</p>
 
@@ -390,12 +396,11 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
             </Table>
           </div>
 
-          {/* Pagination Controls */}
           {showAll && totalPages > 1 && (
             <div className="flex justify-center items-center mt-4 gap-2">
               <button
                 disabled={currentPage === 1}
-                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
                 className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
               >
                 Previous
@@ -405,7 +410,7 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
               </span>
               <button
                 disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
                 className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
               >
                 Next
@@ -413,7 +418,6 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
             </div>
           )}
 
-          {/* Show All / Show Less Button */}
           <div className="mt-4 flex justify-center">
             <button
               onClick={() => {
