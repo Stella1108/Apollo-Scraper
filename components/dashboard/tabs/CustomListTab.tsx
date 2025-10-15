@@ -14,7 +14,11 @@ import {
 import { toast } from "sonner";
 import { ListChecks, Loader as Loader2, Upload } from "lucide-react";
 
-export function CustomListTab() {
+interface CustomListTabProps {
+  user?: any; // Add your user type here if available
+}
+
+export function CustomListTab({ user }: CustomListTabProps) {
   const [listName, setListName] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -37,6 +41,9 @@ export function CustomListTab() {
     setLoading(true);
 
     try {
+      // Here you can use `user` if needed, for example:
+      // const payload = { userId: user?.id, listName, ...etc }
+
       // Simulate upload delay
       await new Promise((resolve) => setTimeout(resolve, 2500));
       toast.success("Custom list uploaded successfully!");
@@ -63,7 +70,10 @@ export function CustomListTab() {
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500 max-w-9xl mx-auto p-4">
       <div>
-        <h2 className="text-3xl font-extrabold bg-gradient-to-r from-blue-500 via-pink-500 to-indigo-600 bg-clip-text text-transparent mb-3 animate-gradient-x" style={{ backgroundSize: "200% 200%" }}>
+        <h2
+          className="text-3xl font-extrabold bg-gradient-to-r from-blue-500 via-pink-500 to-indigo-600 bg-clip-text text-transparent mb-3 animate-gradient-x"
+          style={{ backgroundSize: "200% 200%" }}
+        >
           Custom List
         </h2>
         <p className="text-slate-600 text-lg max-w-xl">
@@ -230,7 +240,7 @@ export function CustomListTab() {
             <Button
               type="submit"
               disabled={loading}
-              className="w-80% bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-medium shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98] align item-center"
+              className="w-4/5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-medium shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center"
             >
               {loading ? (
                 <>

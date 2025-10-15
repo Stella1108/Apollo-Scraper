@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Header } from "@/components/dashboard/Header";
-import {ApolloScraperTab} from "@/components/dashboard/tabs/ApolloScraperTab";
-
+import { ApolloScraperTab } from "@/components/dashboard/tabs/ApolloScraperTab";
 import { EmailVerifierTab } from "@/components/dashboard/tabs/EmailVerifierTab";
 import { CustomListTab } from "@/components/dashboard/tabs/CustomListTab";
 import { ComingSoonTab } from "@/components/dashboard/tabs/ComingSoonTab";
@@ -42,13 +41,13 @@ export default function DashboardPage() {
   const renderTabContent = () => {
     switch (activeTab) {
       case "apollo-scraper":
-        return <ApolloScraperTab />;
+        return <ApolloScraperTab user={user} />;
       case "email-verifier":
-        return <EmailVerifierTab />;
+        return <EmailVerifierTab user={user} />;
       case "custom-list":
-        return <CustomListTab />;
+        return <CustomListTab user={user} />;
       case "billing":
-        return <BillingTab />;
+        return <BillingTab user={user} />;
       case "email-warmup":
         return (
           <ComingSoonTab
@@ -99,13 +98,13 @@ export default function DashboardPage() {
           />
         );
       default:
-        return <ApolloScraperTab />;
+        return <ApolloScraperTab user={user} />;
     }
   };
 
-  // Sidebar widths in pixels to use for margin calculation
-  const sidebarExpandedWidth = 10; // 18.75rem * 16px
-  const sidebarCollapsedWidth = 10; // 5.625rem * 16px approximately
+  // Sidebar widths in rem * 16 for pixel approximation
+  const sidebarExpandedWidth = 0.75 * 16;
+  const sidebarCollapsedWidth = 2.625 * 16;
 
   const marginLeft = collapsed ? sidebarCollapsedWidth : sidebarExpandedWidth;
 
@@ -125,6 +124,7 @@ export default function DashboardPage() {
         style={{ marginLeft }}
       >
         <Header collapsed={collapsed} />
+
         <div className="flex-1 overflow-y-auto">
           <div className="p-2">{renderTabContent()}</div>
         </div>

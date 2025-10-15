@@ -1,18 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!; // For client-side or use service role on backend securely
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Insert job
+// Additional DB helper functions below:
 export async function insertScrapingJob(job: Omit<any, 'id'>) {
   const { data, error } = await supabase.from('scraper_requests').insert(job).select().single();
   if (error) throw error;
   return data;
 }
 
-// Update job
 export async function updateScrapingJobStatus(jobId: string, status: string, extracted: number, downloadLink?: string) {
   const { error } = await supabase
     .from('scraper_requests')
@@ -21,7 +20,6 @@ export async function updateScrapingJobStatus(jobId: string, status: string, ext
   if (error) throw error;
 }
 
-// Insert leads
 export async function insertLeads(jobId: string, leads: any[]) {
   const dataToInsert = leads.map((lead) => ({
     job_id: jobId,

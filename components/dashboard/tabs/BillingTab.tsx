@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
@@ -8,6 +8,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Check, CreditCard, Zap, X } from "lucide-react";
 import { toast } from "sonner";
+
+interface BillingTabProps {
+  user?: any; // Add your user type here if available
+}
 
 const plans = [
   {
@@ -56,7 +60,7 @@ const plans = [
   },
 ];
 
-export function BillingTab() {
+export function BillingTab({ user }: BillingTabProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -96,6 +100,9 @@ export function BillingTab() {
     e.preventDefault();
     setLoading(true);
 
+    // Here you could send payment info + user ID (user?.id) to your backend
+    // to process subscription and payment for the selected plan.
+
     // Mock payment processing delay
     setTimeout(() => {
       setLoading(false);
@@ -109,8 +116,8 @@ export function BillingTab() {
       <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
         <div>
           <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-500 via-pink-500 to-indigo-600 bg-clip-text text-transparent">
-  Billing & Subscriptions
-</h2>
+            Billing & Subscriptions
+          </h2>
 
           <p className="text-slate-600">
             Choose the perfect plan for your lead generation needs
@@ -192,9 +199,7 @@ export function BillingTab() {
                   style={{ width: "34.2%" }}
                 />
               </div>
-              <p className="text-xs text-slate-500">
-                658 credits remaining this billing period
-              </p>
+              <p className="text-xs text-slate-500">658 credits remaining this billing period</p>
             </div>
           </CardContent>
         </Card>

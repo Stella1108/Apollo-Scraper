@@ -51,7 +51,11 @@ interface ScraperRequest {
   downloadLink?: string | null;
 }
 
-export function ApolloScraperTab() {
+interface ApolloScraperTabProps {
+  user: any; // Replace 'any' with your actual user type
+}
+
+export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
   const [url, setUrl] = useState("");
   const [leadsCount, setLeadsCount] = useState("");
   const [fileName, setFileName] = useState("");
@@ -68,12 +72,16 @@ export function ApolloScraperTab() {
 
   useEffect(() => {
     fetchRequests();
-  }, []);
+  }, [user]); // refetch whenever user changes
 
   async function fetchRequests() {
+    if (!user?.id) {
+      setRequests([]); // No user, no requests
+      return;
+    }
     setLoading(true);
     try {
-      const response = await fetch("/api/fetch-scrape-requests");
+      const response = await fetch(`/api/fetch-scrape-requests?userId=${encodeURIComponent(user.id)}`);
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         throw new Error(errorData?.message || "Failed to load requests");
@@ -100,51 +108,7 @@ export function ApolloScraperTab() {
     }
   }
 
-  const getStatusBadge = (status: ScraperRequest["status"]) => {
-    const variants = {
-      pending: "bg-yellow-100 text-yellow-800",
-      processing: "bg-blue-100 text-blue-800",
-      completed: "bg-green-100 text-green-800",
-      failed: "bg-red-100 text-red-800",
-    };
-    const icons = {
-      pending: <RefreshCcw className="inline w-4 h-4 mr-1" />,
-      processing: <Loader2 className="inline w-4 h-4 mr-1 animate-spin" />,
-      completed: <CheckCircle className="inline w-4 h-4 mr-1" />,
-      failed: <XCircle className="inline w-4 h-4 mr-1" />,
-    };
-
-    return (
-      <Badge
-        className={`${variants[status]} flex items-center justify-center gap-1 px-3 py-1`}
-        variant="secondary"
-      >
-        {icons[status]}
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </Badge>
-    );
-  };
-
-  const filtered = useMemo(() => {
-    let filteredItems = requests;
-    if (filterFileName.trim()) {
-      filteredItems = requests.filter((r) =>
-        r.fileName.toLowerCase().includes(filterFileName.toLowerCase())
-      );
-    }
-    return filteredItems;
-  }, [requests, filterFileName]);
-
-  const totalFiltered = filtered.length;
-  const totalPages = Math.ceil(totalFiltered / pageSize);
-
-  const displayRequests = useMemo(() => {
-    if (!showAll) {
-      return filtered.slice(0, 10);
-    }
-    const startIdx = (currentPage - 1) * pageSize;
-    return filtered.slice(startIdx, startIdx + pageSize);
-  }, [filtered, showAll, currentPage]);
+  // Your existing functions for handleSubmit, getStatusBadge, handleRefresh, etc.
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -155,13 +119,10 @@ export function ApolloScraperTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url, leadsCount: Number(leadsCount), fileName, fileFormat }),
       });
-
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         if (errorData?.error === "apollo_scraper_overloaded") {
-          toast.error(
-            "The Apollo service is currently experiencing high traffic. Please try again in a few minutes."
-          );
+          toast.error("The Apollo service is currently experiencing high traffic. Please try again in a few minutes.");
         } else {
           toast.error(errorData?.message || "Error submitting scraping request");
         }
@@ -207,8 +168,49 @@ export function ApolloScraperTab() {
     toast("Refreshed requests list", { duration: 2000 });
   };
 
+  const getStatusBadge = (status: ScraperRequest["status"]) => {
+    const variants = {
+      pending: "bg-yellow-100 text-yellow-800",
+      processing: "bg-blue-100 text-blue-800",
+      completed: "bg-green-100 text-green-800",
+      failed: "bg-red-100 text-red-800",
+    };
+    const icons = {
+      pending: <RefreshCcw className="inline w-4 h-4 mr-1" />,
+      processing: <Loader2 className="inline w-4 h-4 mr-1 animate-spin" />,
+      completed: <CheckCircle className="inline w-4 h-4 mr-1" />,
+      failed: <XCircle className="inline w-4 h-4 mr-1" />,
+    };
+
+    return (
+      <Badge className={`${variants[status]} flex items-center justify-center gap-1 px-3 py-1`} variant="secondary">
+        {icons[status]}
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </Badge>
+    );
+  };
+
+  const filtered = useMemo(() => {
+    let filteredItems = requests;
+    if (filterFileName.trim()) {
+      filteredItems = requests.filter((r) => r.fileName.toLowerCase().includes(filterFileName.toLowerCase()));
+    }
+    return filteredItems;
+  }, [requests, filterFileName]);
+
+  const totalFiltered = filtered.length;
+  const totalPages = Math.ceil(totalFiltered / pageSize);
+
+  const displayRequests = useMemo(() => {
+    if (!showAll) {
+      return filtered.slice(0, 10);
+    }
+    const startIdx = (currentPage - 1) * pageSize;
+    return filtered.slice(startIdx, startIdx + pageSize);
+  }, [filtered, showAll, currentPage]);
+
   return (
-    <div className="space-y-8 max-w-8xl mx-auto p-4 w-full">
+     <div className="space-y-8 max-w-20xl mx-auto p-1 w-full">
       <h2 className="text-4xl font-bold text-blue-700 mb-4">Apollo Scraper</h2>
       <p className="mb-6 text-gray-700">Extract high-quality leads from Apollo with precision</p>
 

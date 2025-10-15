@@ -19,8 +19,8 @@ interface HeaderProps {
 
 export function Header({ collapsed }: HeaderProps) {
   // Sidebar widths in px (must match Sidebar's widths)
-  const expandedWidthPx = 300; // 18.75rem * 16
-  const collapsedWidthPx = 90; // 5.625rem * 16 approx
+  const expandedWidthPx = 10; // 18.75rem * 16
+  const collapsedWidthPx = 15; // 5.625rem * 16 approx
 
   const leftPadding = collapsed ? collapsedWidthPx : expandedWidthPx;
 
@@ -43,11 +43,11 @@ export function Header({ collapsed }: HeaderProps) {
       className="h-16 border-b border-slate-100 bg-white flex items-center justify-between px-6 transition-all duration-300"
       style={{
         paddingLeft: leftPadding,
-        width: `calc(100vw - ${leftPadding}px)`, // full viewport width minus sidebar
+        width: `calc(80vw - ${leftPadding}px)`, // full viewport width minus sidebar
         boxSizing: "border-box",
       }}
     >
-      <h1 className="text-2xl font-bold select-none bg-gradient-to-r from-blue-500 via-purple-600 to-indigo-700 bg-clip-text text-transparent text-left">
+      <h1 className="text-2xl font-bold select-none bg-gradient-to-r from-blue-500 via-purple-600 to-indigo-700 bg-clip-text text-transparent text-center">
         Dashboard
       </h1>
 

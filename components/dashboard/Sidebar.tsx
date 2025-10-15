@@ -108,7 +108,7 @@ export function Sidebar({
       <div
         className={cn(
           "h-full bg-white border-r border-slate-200 flex flex-col relative overflow-visible transition-[width] duration-300 ease-in-out",
-          collapsed ? "w-20 min-w-[60px]" : "w-[18.75rem] min-w-[260px]"
+          collapsed ? "w-25 min-w-[50px]" : "w-[15.75rem] min-w-[200px]"
         )}
       >
         <div
@@ -167,6 +167,7 @@ export function Sidebar({
                   onClick={() => onTabChange(tab.id)}
                   onMouseEnter={() => setHoveredTab(tab.id)}
                   onMouseLeave={() => setHoveredTab(null)}
+                  
                   className={cn(
                     "group relative flex w-full select-none items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-left transition-colors duration-200 outline-none",
                     isActive
