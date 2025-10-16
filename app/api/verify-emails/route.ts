@@ -11,14 +11,8 @@ interface VerificationResult {
 }
 
 interface NinjaVerifierResponse {
-  email?: string;
-  user?: string;
-  domain?: string;
-  mx?: string;
-  code?: string; // This is the main field: "ok", "ko", "mb"
-  message?: string; // This contains the actual status like "Accepted", "Rejected", etc.
-  connections?: number;
-  // Additional fields that might be present
+  code?: string;
+  message?: string;
   valid?: boolean;
   status?: string;
   is_valid?: boolean;
@@ -29,6 +23,7 @@ interface NinjaVerifierResponse {
   is_role_account?: boolean;
   risk?: string;
   error?: string;
+  mx?: boolean;
 }
 
 function arrayToCSV(data: VerificationResult[]): string {
@@ -61,6 +56,45 @@ function extractFirstNameFromEmail(email: string): string {
   return email.split("@")[0]?.split('.')[0] || "";
 }
 
+function mapMessageToDetail(message?: string): string {
+  if (!message) return "unknown";
+  
+  const messageLower = message.toLowerCase();
+  
+  const messageMap: { [key: string]: string } = {
+    "accepted": "accept",
+    "valid": "accept", 
+    "rejected": "reject",
+    "invalid": "reject",
+    "spam": "spam_block",
+    "spam block": "spam_block",
+    "disposable": "disposable",
+    "catch all": "catch_all",
+    "catch-all": "catch_all",
+    "role": "role_account",
+    "role account": "role_account",
+    "timeout": "timeout",
+    "unverifiable": "unverifiable",
+    "unknown": "unknown",
+    "limited": "limited",
+    "mx error": "mx_error",
+    "no mx": "no_mx",
+    "high risk": "high_risk",
+    "medium risk": "medium_risk",
+    "low risk": "low_risk",
+    "accept": "accept",
+    "reject": "reject"
+  };
+  
+  for (const [key, value] of Object.entries(messageMap)) {
+    if (messageLower === key.toLowerCase() || messageLower.includes(key.toLowerCase())) {
+      return value;
+    }
+  }
+  
+  return messageLower.replace(/\s+/g, '_');
+}
+
 async function verifyEmail(email: string, token: string): Promise<VerificationResult> {
   const firstName = extractFirstNameFromEmail(email);
   
@@ -69,7 +103,7 @@ async function verifyEmail(email: string, token: string): Promise<VerificationRe
       email, 
       firstName, 
       status: "ko", 
-      details: "reject" 
+      details: "invalid_format" 
     };
   }
 
@@ -77,7 +111,7 @@ async function verifyEmail(email: string, token: string): Promise<VerificationRe
   
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // Reduced to 15s
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
     
     console.log(`🔍 Verifying: ${email}`);
     const res = await fetch(url, { 
@@ -92,22 +126,19 @@ async function verifyEmail(email: string, token: string): Promise<VerificationRe
         email, 
         firstName, 
         status: "md",
-        details: "timeout" 
+        details: "service_error" 
       };
     }
     
     const data: NinjaVerifierResponse = await res.json();
     
-    console.log(`📨 RAW API Response for ${email}:`, JSON.stringify(data));
+    console.log(`📨 API Response for ${email}:`, JSON.stringify(data));
     
-    // SIMPLIFIED and CORRECT mapping based on actual Ninja Verifier API
     let status = "md";
     let details = "unknown";
 
-    // Primary mapping - use the 'code' field which is the main indicator
     if (data.code === "ok") {
       status = "ok";
-      // Map message to proper detail
       details = mapMessageToDetail(data.message);
     } 
     else if (data.code === "ko") {
@@ -118,12 +149,11 @@ async function verifyEmail(email: string, token: string): Promise<VerificationRe
       status = "md";
       details = mapMessageToDetail(data.message);
     }
-    // Fallback to other common API response formats
-    else if (data.valid === true || data.is_valid === true || data.status === "valid" || data.result === "valid") {
+    else if (data.valid === true || data.is_valid === true) {
       status = "ok";
       details = "accept";
     }
-    else if (data.valid === false || data.is_valid === false || data.status === "invalid" || data.result === "invalid") {
+    else if (data.valid === false || data.is_valid === false) {
       status = "ko";
       details = "reject";
     }
@@ -133,31 +163,54 @@ async function verifyEmail(email: string, token: string): Promise<VerificationRe
     }
     else if (data.is_catch_all === true) {
       status = "ok";
-      details = "catch all";
+      details = "catch_all";
     }
     else if (data.is_catch_all === false) {
       status = "md";
-      details = "no catch";
+      details = "no_catch_all";
     }
     else if (data.is_spam === true) {
       status = "ko";
-      details = "spam block";
+      details = "spam_block";
     }
     else if (data.is_role_account === true) {
       status = "md";
-      details = "role account";
+      details = "role_account";
+    }
+    else if (data.risk === "high") {
+      status = "ko";
+      details = "high_risk";
+    }
+    else if (data.risk === "medium") {
+      status = "md";
+      details = "medium_risk";
+    }
+    else if (data.risk === "low") {
+      status = "ok";
+      details = "low_risk";
+    }
+    else if (data.status === "valid" || data.result === "valid") {
+      status = "ok";
+      details = "accept";
+    }
+    else if (data.status === "invalid" || data.result === "invalid") {
+      status = "ko";
+      details = "reject";
+    }
+    else if (data.mx === false) {
+      status = "ko";
+      details = "no_mx";
     }
     else if (data.error) {
       status = "md";
       details = "api_error";
     }
     else {
-      // If we can't determine, use the message directly
       status = "md";
       details = data.message ? data.message.toLowerCase().replace(/\s+/g, '_') : "unknown";
     }
     
-    console.log(`✅ Final mapped status for ${email}: ${status} - ${details}`);
+    console.log(`✅ Final status for ${email}: ${status} - ${details}`);
     
     return { 
       email, 
@@ -168,53 +221,30 @@ async function verifyEmail(email: string, token: string): Promise<VerificationRe
     
   } catch (error: any) {
     console.log(`💥 Network error for ${email}:`, error.message);
+    
+    let errorDetail = "timeout";
+    if (error.name === 'AbortError') {
+      errorDetail = "timeout";
+    } else if (error.message.includes('fetch failed') || error.message.includes('network')) {
+      errorDetail = "network_error";
+    } else {
+      errorDetail = "verification_error";
+    }
+    
     return { 
       email, 
       firstName, 
-      status: "md",
-      details: "timeout" 
+      status: "md", 
+      details: errorDetail 
     };
   }
 }
 
-// Helper function to map Ninja Verifier messages to consistent details
-function mapMessageToDetail(message?: string): string {
-  if (!message) return "unknown";
-  
-  const messageLower = message.toLowerCase();
-  
-  // Map common Ninja Verifier messages to our detail types
-  if (messageLower.includes("accept") || messageLower.includes("valid")) {
-    return "accept";
-  } else if (messageLower.includes("reject") || messageLower.includes("invalid")) {
-    return "reject";
-  } else if (messageLower.includes("timeout")) {
-    return "timeout";
-  } else if (messageLower.includes("catch")) {
-    return "catch all";
-  } else if (messageLower.includes("disposable")) {
-    return "disposable";
-  } else if (messageLower.includes("spam")) {
-    return "spam block";
-  } else if (messageLower.includes("role")) {
-    return "role account";
-  } else if (messageLower.includes("unverifiable") || messageLower.includes("unknown")) {
-    return "unverifiable";
-  } else if (messageLower.includes("limited")) {
-    return "limited";
-  } else if (messageLower.includes("mx")) {
-    return "mx error";
-  }
-  
-  return messageLower.replace(/\s+/g, '_');
-}
-
-// Optimized batch processing
 async function verifyEmailsInBatches(
   emails: string[],
   token: string,
-  batchSize = 10, // Reduced batch size
-  delayBetweenBatches = 500 // Reduced delay
+  batchSize = 25,
+  delayBetweenBatches = 800
 ): Promise<VerificationResult[]> {
   const results: VerificationResult[] = [];
   
@@ -233,7 +263,8 @@ async function verifyEmailsInBatches(
     
     results.push(...successfulResults);
     
-    // Small delay to avoid overwhelming the API
+    console.log(`✅ Batch ${Math.floor(i/batchSize) + 1} completed: ${successfulResults.length}/${batch.length} successful`);
+    
     if (i + batchSize < emails.length) {
       await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
     }
@@ -242,7 +273,7 @@ async function verifyEmailsInBatches(
   return results;
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
     const emails: string[] = await request.json();
 
@@ -265,8 +296,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    if (validEmails.length > 1000) {
-      return new Response(JSON.stringify({ message: "Maximum 1000 emails allowed" }), {
+    if (validEmails.length > 50000) {
+      return new Response(JSON.stringify({ message: "Maximum 50,000 emails allowed" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
@@ -281,7 +312,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Get token from NinjaVerifier
     let token: string;
     try {
       console.log("🔑 Fetching token from NinjaVerifier...");
@@ -332,14 +362,9 @@ export async function POST(request: NextRequest) {
 
     console.log(`🚀 Starting verification for ${validEmails.length} emails`);
     
-    const results = await verifyEmailsInBatches(validEmails, token, 10, 500);
+    const results = await verifyEmailsInBatches(validEmails, token, 25, 800);
 
     console.log(`🎉 Verification completed: ${results.length} results`);
-    
-    // Log sample responses to debug
-    if (results.length > 0) {
-      console.log('📊 Sample results:', results.slice(0, 3));
-    }
     
     const statusCounts = results.reduce((acc, result) => {
       const statusKey = result.status;
