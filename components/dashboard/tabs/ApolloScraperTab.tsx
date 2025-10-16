@@ -40,6 +40,13 @@ import {
 
 import { supabase } from "@/lib/supabase";
 
+interface User {
+  id: string;
+  email?: string;
+  name?: string;
+  // add any other user properties your app uses
+}
+
 interface ScraperRequest {
   id: string;
   date: string;
@@ -54,7 +61,7 @@ interface ScraperRequest {
 }
 
 interface ApolloScraperTabProps {
-  user: any; // Use your user type here
+  user: User;
 }
 
 export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
@@ -74,7 +81,7 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
 
   useEffect(() => {
     fetchRequests();
-  }, [user]); 
+  }, [user]);
 
   async function fetchRequests() {
     if (!user?.id) {
@@ -121,13 +128,21 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
       const response = await fetch("/api/scrape-leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, leadsCount: Number(leadsCount), fileName, fileFormat, user_id: user.id }),
+        body: JSON.stringify({
+          url,
+          leadsCount: Number(leadsCount),
+          fileName,
+          fileFormat,
+          user_id: user.id,
+        }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         if (errorData?.error === "apollo_scraper_overloaded") {
-          toast.error("The Apollo service is currently experiencing high traffic. Please try again in a few minutes.");
+          toast.error(
+            "The Apollo service is currently experiencing high traffic. Please try again in a few minutes."
+          );
         } else {
           toast.error(errorData?.message || "Error submitting scraping request");
         }
@@ -142,18 +157,17 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
       const pollInterval = 3000;
 
       while (attempts < maxAttempts) {
-        await new Promise(res => setTimeout(res, pollInterval));
+        await new Promise((res) => setTimeout(res, pollInterval));
         attempts++;
         await fetchRequests();
 
-        const current = requestsRef.current.find(r => r.id === newRequest.id);
+        const current = requestsRef.current.find((r) => r.id === newRequest.id);
         if (current) {
           if (current.status === "completed") {
             toast.success("Scraping completed! Download your file below.");
             resetForm();
             break;
-          }
-          else if (current.status === "failed") {
+          } else if (current.status === "failed") {
             toast.error("Scraping failed. Please try again.");
             break;
           }
@@ -194,7 +208,10 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
     };
 
     return (
-      <Badge className={`${variants[status]} flex items-center justify-center gap-1 px-3 py-1`} variant="secondary">
+      <Badge
+        className={`${variants[status]} flex items-center justify-center gap-1 px-3 py-1`}
+        variant="secondary"
+      >
         {icons[status]}
         {status.charAt(0).toUpperCase() + status.slice(1)}
       </Badge>
@@ -203,7 +220,9 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
 
   const filtered = useMemo(() => {
     if (!filterFileName.trim()) return requests;
-    return requests.filter(r => r.fileName.toLowerCase().includes(filterFileName.toLowerCase()));
+    return requests.filter((r) =>
+      r.fileName.toLowerCase().includes(filterFileName.toLowerCase())
+    );
   }, [requests, filterFileName]);
 
   const totalFiltered = filtered.length;
@@ -218,7 +237,9 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
   return (
     <div className="space-y-8 max-w-8xl mx-auto p-4 w-full">
       <h2 className="text-4xl font-bold text-blue-700 mb-4">Apollo Scraper</h2>
-      <p className="mb-6 text-gray-700">Extract high-quality leads from Apollo with precision</p>
+      <p className="mb-6 text-gray-700">
+        Extract high-quality leads from Apollo with precision
+      </p>
 
       {/* New Scraping Request Form */}
       <Card className="shadow-md border border-gray-300 hover:shadow-lg transition-shadow duration-300 w-full">
@@ -233,7 +254,9 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
           <form onSubmit={handleSubmit} className="space-y-6 w-full">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 w-full">
               <div className="space-y-1 w-full">
-                <Label htmlFor="url" className="font-semibold text-blue-700">Apollo URL</Label>
+                <Label htmlFor="url" className="font-semibold text-blue-700">
+                  Apollo URL
+                </Label>
                 <Input
                   id="url"
                   type="url"
@@ -244,7 +267,9 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
                 />
               </div>
               <div className="space-y-1 w-full">
-                <Label htmlFor="leadsCount" className="font-semibold text-blue-700">Number of Leads</Label>
+                <Label htmlFor="leadsCount" className="font-semibold text-blue-700">
+                  Number of Leads
+                </Label>
                 <Input
                   id="leadsCount"
                   type="number"
@@ -256,7 +281,9 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
                 />
               </div>
               <div className="space-y-1 w-full">
-                <Label htmlFor="fileName" className="font-semibold text-blue-700">File Name (Optional)</Label>
+                <Label htmlFor="fileName" className="font-semibold text-blue-700">
+                  File Name (Optional)
+                </Label>
                 <Input
                   id="fileName"
                   type="text"
@@ -266,8 +293,13 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
                 />
               </div>
               <div className="space-y-1 w-full">
-                <Label htmlFor="fileFormat" className="font-semibold text-blue-700">Export Format</Label>
-                <Select value={fileFormat} onValueChange={(v) => setFileFormat(v as "csv" | "xlsx")}>
+                <Label htmlFor="fileFormat" className="font-semibold text-blue-700">
+                  Export Format
+                </Label>
+                <Select
+                  value={fileFormat}
+                  onValueChange={(v) => setFileFormat(v as "csv" | "xlsx")}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select format" />
                   </SelectTrigger>
@@ -400,7 +432,7 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
             <div className="flex justify-center items-center mt-4 gap-2">
               <button
                 disabled={currentPage === 1}
-                onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
                 className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
               >
                 Previous
@@ -410,7 +442,7 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
               </span>
               <button
                 disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
                 className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
               >
                 Next

@@ -3,14 +3,25 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  Card, CardContent, CardDescription, CardHeader, CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Check, CreditCard, Zap, X } from "lucide-react";
 import { toast } from "sonner";
 
+interface User {
+  id: string;
+  email?: string;
+  name?: string;
+  // add other user properties if needed
+}
+
 interface BillingTabProps {
-  user?: any; // Add your user type here if available
+  user?: User; // Use your User type here if available
 }
 
 const plans = [
@@ -93,7 +104,7 @@ export function BillingTab({ user }: BillingTabProps) {
   }, [modalOpen]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
@@ -125,7 +136,7 @@ export function BillingTab({ user }: BillingTabProps) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {plans.map(plan => (
+          {plans.map((plan) => (
             <Card
               key={plan.name}
               className={`shadow-md transition-transform duration-300 hover:shadow-xl hover:scale-[1.03] cursor-pointer relative ${
@@ -155,7 +166,7 @@ export function BillingTab({ user }: BillingTabProps) {
               </CardHeader>
               <CardContent className="space-y-4">
                 <ul className="space-y-3">
-                  {plan.features.map(feature => (
+                  {plan.features.map((feature) => (
                     <li
                       key={feature}
                       className="flex items-start gap-2 text-slate-700"
@@ -216,7 +227,7 @@ export function BillingTab({ user }: BillingTabProps) {
         >
           <div
             className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 relative"
-            onClick={e => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={closeModal}
@@ -337,7 +348,7 @@ export function BillingTab({ user }: BillingTabProps) {
                     ></path>
                   </svg>
                 ) : (
-                  <>Pay ${plans.find(p => p.name === selectedPlan)?.price.slice(1)}</>
+                  <>Pay ${plans.find((p) => p.name === selectedPlan)?.price.slice(1)}</>
                 )}
               </Button>
             </form>

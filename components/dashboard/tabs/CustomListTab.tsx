@@ -14,8 +14,15 @@ import {
 import { toast } from "sonner";
 import { ListChecks, Loader as Loader2, Upload } from "lucide-react";
 
+interface User {
+  id: string;
+  email?: string;
+  name?: string;
+  // add other user properties as needed
+}
+
 interface CustomListTabProps {
-  user?: any; // Add your user type here if available
+  user?: User;
 }
 
 export function CustomListTab({ user }: CustomListTabProps) {
@@ -41,14 +48,13 @@ export function CustomListTab({ user }: CustomListTabProps) {
     setLoading(true);
 
     try {
-      // Here you can use `user` if needed, for example:
-      // const payload = { userId: user?.id, listName, ...etc }
+      // You can use user?.id here if needed for uploading tied to user
 
-      // Simulate upload delay
+      // Simulate upload delay (replace with your actual upload logic)
       await new Promise((resolve) => setTimeout(resolve, 2500));
       toast.success("Custom list uploaded successfully!");
 
-      // Reset all fields
+      // Reset all fields after successful upload
       setListName("");
       setFile(null);
       setIndustry("");
@@ -77,7 +83,8 @@ export function CustomListTab({ user }: CustomListTabProps) {
           Custom List
         </h2>
         <p className="text-slate-600 text-lg max-w-xl">
-          Upload and manage your custom lead lists. Fill out your search criteria and contact details below.
+          Upload and manage your custom lead lists. Fill out your search
+          criteria and contact details below.
         </p>
       </div>
 
@@ -88,14 +95,17 @@ export function CustomListTab({ user }: CustomListTabProps) {
             Upload Custom List
           </CardTitle>
           <CardDescription>
-            Upload a CSV file containing your custom leads or enter contact information manually
+            Upload a CSV file containing your custom leads or enter contact
+            information manually
           </CardDescription>
         </CardHeader>
 
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <section className="space-y-4">
-              <h3 className="text-xl font-semibold text-slate-800">Search Criteria</h3>
+              <h3 className="text-xl font-semibold text-slate-800">
+                Search Criteria
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                   <Label htmlFor="industry">Industry</Label>
