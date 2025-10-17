@@ -132,18 +132,13 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
   const [progress, setProgress] = useState(0);
   const [processedCount, setProcessedCount] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
+  const [currentBatch, setCurrentBatch] = useState(0);
+  const [totalBatches, setTotalBatches] = useState(0);
 
   // Get the correct API URL based on environment
   const getApiUrl = () => {
-    if (typeof window !== 'undefined') {
-      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      if (isLocalhost) {
-        return "/api/verify-emails"; // Local development
-      } else {
-        return "https://work-scrapper.onrender.com/api/verify-emails"; // Production
-      }
-    }
-    return "https://work-scrapper.onrender.com/api/verify-emails"; // Default
+    // Always use relative path - Next.js will handle routing
+    return "/api/verify-emails";
   };
 
   const extractFirstNameFromEmail = (email: string): string =>
@@ -199,7 +194,7 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
     return results;
   };
 
-  // Chunked verification implementation
+  // Chunked verification implementation with improved timeout handling
   const verifyAllEmailsAtOnce = async (emails: string[]): Promise<VerificationResult[]> => {
     try {
       console.log("🔄 Starting chunked verification for", emails.length, "emails");
@@ -208,23 +203,31 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
       const apiUrl = getApiUrl();
       console.log("🌐 Using API URL:", apiUrl);
       
-      // Process in smaller chunks
-      const CHUNK_SIZE = 10; // Reduced for better reliability
+      // Process in smaller chunks for better reliability
+      const CHUNK_SIZE = 5; // Reduced from 10 to 5
       const chunks = [];
       
       for (let i = 0; i < emails.length; i += CHUNK_SIZE) {
         chunks.push(emails.slice(i, i + CHUNK_SIZE));
       }
 
+      // Set batch information for display
+      setTotalBatches(chunks.length);
+      setCurrentBatch(0);
+
       const allResults: VerificationResult[] = [];
       
       for (let i = 0; i < chunks.length; i++) {
         console.log(`📦 Processing chunk ${i + 1}/${chunks.length}`);
+        setCurrentBatch(i + 1);
         
         try {
-          // Add timeout and better error handling
+          // Increased timeout from 30s to 90s to prevent AbortError
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+          const timeoutId = setTimeout(() => {
+            console.log(`⏰ Timeout for chunk ${i + 1}`);
+            controller.abort();
+          }, 90000); // 90 second timeout - increased from 30s
 
           const response = await fetch(apiUrl, {
             method: "POST",
@@ -235,11 +238,18 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
             signal: controller.signal
           });
 
-          clearTimeout(timeoutId);
+          clearTimeout(timeoutId); // Clear timeout if request completes
 
           if (!response.ok) {
             const errorText = await response.text();
             console.error(`❌ Chunk ${i + 1} failed:`, response.status, errorText);
+            
+            if (response.status === 404) {
+              toast.error(`API endpoint not found. Please make sure the backend is deployed.`);
+            } else if (response.status === 503) {
+              toast.error(`Email verification service is temporarily unavailable. Please try again later.`);
+            }
+            
             throw new Error(`HTTP ${response.status}: ${errorText}`);
           }
 
@@ -256,15 +266,41 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
           setProcessedCount(Math.min((i + 1) * CHUNK_SIZE, emails.length));
           setProgress(((i + 1) / chunks.length) * 100);
           
-          // Small delay to avoid rate limiting
+          // Show batch completion toast for larger batches
+          if (chunks.length > 3) {
+            const validCount = chunkResults.filter(r => r.status === "ok").length;
+            const invalidCount = chunkResults.filter(r => r.status === "ko").length;
+            const unknownCount = chunkResults.filter(r => r.status === "md").length;
+            
+            toast.success(`✅ Batch ${i + 1}/${chunks.length}: ${validCount} valid, ${invalidCount} invalid, ${unknownCount} unknown`, {
+              duration: 2000,
+            });
+          }
+          
+          // Increased delay between chunks from 1s to 2s to avoid rate limiting
           if (i < chunks.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 2000));
           }
         } catch (chunkError) {
           console.error(`❌ Chunk ${i + 1} error:`, chunkError);
           
-          // Add fallback results for failed chunk with more specific details
-          const errorType = chunkError instanceof Error && chunkError.name === 'AbortError' ? "timeout" : "api_error";
+          // Improved error detection and handling
+          let errorType = "api_error";
+          let userMessage = `Batch ${i + 1} API error`;
+          
+          if (chunkError instanceof Error) {
+            if (chunkError.name === 'AbortError') {
+              errorType = "timeout";
+              userMessage = `Batch ${i + 1} timed out (90s) - emails may be processing slowly`;
+            } else if (chunkError.message.includes('fetch') || chunkError.message.includes('network')) {
+              errorType = "network_error";
+              userMessage = `Batch ${i + 1} network error - check your connection`;
+            } else if (chunkError.message.includes('500')) {
+              errorType = "service_error";
+              userMessage = `Batch ${i + 1} service error - backend may be overloaded`;
+            }
+          }
+          
           const chunkResults = chunks[i].map((email) => ({
             email,
             status: "md" as const,
@@ -272,16 +308,11 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
           }));
           allResults.push(...chunkResults);
           
-          // Show more specific error toast
-          const errorMessage = errorType === "timeout" 
-            ? `Chunk ${i + 1} timed out (30s)` 
-            : `Chunk ${i + 1} API error`;
-          
-          toast.error(errorMessage);
+          toast.error(userMessage);
         }
       }
 
-      console.log("✅ All chunks processed successfully");
+      console.log("✅ All batches processed successfully");
       return allResults;
     } catch (error) {
       console.error("💥 Verification error:", error);
@@ -357,6 +388,8 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
     setCsvBlobUrl(null);
     setProgress(0);
     setProcessedCount(0);
+    setCurrentBatch(0);
+    setTotalBatches(0);
 
     const startTime = Date.now();
 
@@ -382,7 +415,7 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
 
       toast.success(
         `🎉 Verified ${allResults.length} emails in ${timeTaken}s! 
-        ${okCount} ACCEPT • ${koCount} REJECT • ${mdCount} UNKNOWN`,
+        ${okCount} ✅ ACCEPT • ${koCount} ❌ REJECT • ${mdCount} ⚠️ UNKNOWN`,
         { 
           duration: 6000,
         }
@@ -397,6 +430,8 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
       setLoading(false);
       setProgress(0);
       setProcessedCount(0);
+      setCurrentBatch(0);
+      setTotalBatches(0);
     }
   };
 
@@ -496,7 +531,7 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
         <div className="flex items-center gap-3 mb-3">
           <div className="relative">
             <div className="absolute -inset-1 bg-gradient-to-r from-[#8b39ea] to-[#137fc8] rounded-lg blur opacity-1"></div>
-     
+            <ShieldCheck className="w-12 h-12 text-[#8b39ea] relative z-10" />
           </div>
           <div>
             <h2 className={gradientTextClass}>Professional Email Verifier</h2>
@@ -526,8 +561,8 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
             ></div>
           </div>
           <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>⚡ Chunked Processing</span>
-            <span>10 emails per batch</span>
+            <span>⚡ Processing Batch {currentBatch}/{totalBatches}</span>
+            <span>5 emails per batch</span>
           </div>
         </div>
       )}
@@ -659,10 +694,10 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
                   <Loader2 className="mr-3 h-6 w-6 animate-spin" />
                   <div className="text-left">
                     <div className="font-semibold">
-                      Processing {processedCount}/{totalEmails} emails...
+                      Processing Batch {currentBatch}/{totalBatches} ({processedCount}/{totalEmails} emails)
                     </div>
                     <div className="text-sm font-normal opacity-90">
-                      Chunked processing (10 per batch)
+                      Enhanced processing (5 per batch, 90s timeout)
                     </div>
                   </div>
                 </>

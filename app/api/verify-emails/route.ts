@@ -27,25 +27,37 @@ let cachedToken: { token: string; expiry: number } | null = null;
 async function getToken(): Promise<string> {
   const apiKey = process.env.NINJA_EMAIL_VERIFIER_API_KEY;
   if (!apiKey) {
-    throw new Error("NINJA_EMAIL_VERIFIER_API_KEY is not configured");
+    console.error("❌ NINJA_EMAIL_VERIFIER_API_KEY is not configured");
+    throw new Error("Email verification service is not configured properly");
   }
 
   // Return cached token if valid
   if (cachedToken && Date.now() < cachedToken.expiry) {
+    console.log("🔑 Using cached token");
     return cachedToken.token;
   }
 
   try {
-    const tokenResponse = await fetch(`${TOKEN_URL}${apiKey}`);
+    console.log("🔄 Fetching new token...");
+    const tokenResponse = await fetch(`${TOKEN_URL}${apiKey}`, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'EmailVerifier/1.0',
+        'Accept': 'application/json',
+      }
+    });
+    
     if (!tokenResponse.ok) {
-      throw new Error(`Token fetch failed: ${tokenResponse.status}`);
+      throw new Error(`Token API responded with status: ${tokenResponse.status}`);
     }
 
     const tokenData = await tokenResponse.json();
     
     if (!tokenData.token) {
-      throw new Error("No token received from API");
+      throw new Error("No token received from token service");
     }
+
+    console.log("✅ Token acquired successfully");
 
     // Cache token for 23 hours (with 1 hour buffer)
     cachedToken = {
@@ -55,66 +67,90 @@ async function getToken(): Promise<string> {
 
     return tokenData.token;
   } catch (error) {
-    console.error("Token acquisition error:", error);
-    throw new Error(`Failed to get verification token: ${error}`);
+    console.error("❌ Token acquisition error:", error);
+    throw new Error(`Failed to get verification token: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
-// High-performance batch processing
+// Enhanced batch processing with better error handling
 async function processEmailsConcurrently(emails: string[], token: string): Promise<VerificationResult[]> {
-  const CONCURRENT_REQUESTS = 10; // Reduced for better stability
+  const CONCURRENT_REQUESTS = 5; // Reduced for better stability and rate limiting
   const results: VerificationResult[] = [];
+  
+  console.log(`🔄 Processing ${emails.length} emails with concurrency ${CONCURRENT_REQUESTS}`);
   
   // Process in concurrent groups
   for (let i = 0; i < emails.length; i += CONCURRENT_REQUESTS) {
     const batch = emails.slice(i, i + CONCURRENT_REQUESTS);
+    const batchNumber = Math.floor(i / CONCURRENT_REQUESTS) + 1;
     
+    console.log(`📦 Processing batch ${batchNumber}/${Math.ceil(emails.length / CONCURRENT_REQUESTS)}`);
+
     const batchPromises = batch.map(email => 
-      verifySingleEmailWithRetry(email, token, 2) // 2 retries
+      verifySingleEmailWithRetry(email, token, 3) // Increased to 3 retries
     );
 
     try {
-      const batchResults = await Promise.all(batchPromises);
-      results.push(...batchResults);
+      const batchResults = await Promise.allSettled(batchPromises);
       
-      // Small delay between batches to respect rate limits
+      // Process both successful and failed promises
+      batchResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          results.push(result.value);
+        } else {
+          console.warn(`❌ Failed to verify ${batch[index]}:`, result.reason);
+          results.push(createFailedResult(batch[index]));
+        }
+      });
+      
+      // More conservative delay between batches to respect rate limits
       if (i + CONCURRENT_REQUESTS < emails.length) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
       }
     } catch (error) {
-      console.error(`Batch ${i} failed:`, error);
-      // If batch fails, add failed results and continue
+      console.error(`❌ Batch ${batchNumber} failed:`, error);
+      // If entire batch fails, add failed results and continue
       const failedResults = batch.map(email => createFailedResult(email));
       results.push(...failedResults);
     }
   }
 
+  console.log(`✅ Completed processing ${results.length} emails`);
   return results;
 }
 
-// Robust email verification with retry logic
+// Enhanced email verification with better timeout handling
 async function verifySingleEmailWithRetry(
   email: string, 
   token: string, 
-  maxRetries: number = 2
+  maxRetries: number = 3
 ): Promise<VerificationResult> {
   const firstName = extractFirstNameFromEmail(email);
   
+  // Enhanced email validation
   if (!isValidEmail(email)) {
+    console.log(`❌ Invalid email format: ${email}`);
     return createResult(email, firstName, "ko", "invalid_format");
   }
+
+  let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const url = `${VERIFY_URL_BASE}?email=${encodeURIComponent(email)}&token=${token}`;
       
+      console.log(`🔍 Attempt ${attempt} for ${email}`);
+      
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+        console.log(`⏰ Timeout for ${email} on attempt ${attempt}`);
+      }, 15000); // Increased to 15s timeout
 
       const response = await fetch(url, {
         signal: controller.signal,
         headers: {
-          'User-Agent': 'NinjaEmailVerifier/2.0',
+          'User-Agent': 'EmailVerifier/1.0',
           'Accept': 'application/json',
           'Cache-Control': 'no-cache'
         }
@@ -123,55 +159,65 @@ async function verifySingleEmailWithRetry(
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const data: NinjaVerifierResponse = await response.json();
+      
+      console.log(`✅ Success for ${email} on attempt ${attempt}:`, data);
       
       // Map Ninja Verifier response to our status
       return mapNinjaResponseToResult(email, firstName, data);
 
     } catch (error) {
-      console.warn(`Attempt ${attempt} failed for ${email}:`, error);
+      lastError = error as Error;
+      console.warn(`⚠️ Attempt ${attempt} failed for ${email}:`, error);
       
       if (attempt === maxRetries) {
-        return createResult(email, firstName, "md", 
-          error instanceof Error && error.name === 'AbortError' ? "timeout" : "api_error"
-        );
+        const errorType = lastError.name === 'AbortError' ? "timeout" : "api_error";
+        console.log(`❌ All attempts failed for ${email}, final error: ${errorType}`);
+        return createResult(email, firstName, "md", errorType);
       }
       
-      // Wait before retry (exponential backoff)
-      await new Promise(resolve => setTimeout(resolve, attempt * 500));
+      // Exponential backoff with jitter
+      const baseDelay = attempt * 1000;
+      const jitter = Math.random() * 1000;
+      const delay = baseDelay + jitter;
+      console.log(`⏳ Waiting ${delay}ms before retry ${attempt + 1} for ${email}`);
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
 
+  // This should never be reached due to the above logic, but for safety:
   return createResult(email, firstName, "md", "max_retries_exceeded");
 }
 
-// Map Ninja Verifier API response to our format
+// Enhanced response mapping
 function mapNinjaResponseToResult(
   email: string, 
   firstName: string, 
   data: NinjaVerifierResponse
 ): VerificationResult {
+  console.log(`📨 Mapping response for ${email}:`, data);
+
   // Handle different response formats from Ninja API
-  if (data.code === "ok" || data.valid === true || data.is_valid === true) {
-    return createResult(email, firstName, "ok", 
-      data.message?.toLowerCase().replace(/\s+/g, '_') || "valid"
-    );
+  if (data.code === "ok" || data.valid === true || data.is_valid === true || data.status === "valid") {
+    const details = data.message?.toLowerCase().replace(/\s+/g, '_') || "valid";
+    return createResult(email, firstName, "ok", details);
   }
   
-  if (data.code === "ko" || data.valid === false || data.is_valid === false) {
-    return createResult(email, firstName, "ko", 
-      data.message?.toLowerCase().replace(/\s+/g, '_') || "invalid"
-    );
+  if (data.code === "ko" || data.valid === false || data.is_valid === false || data.status === "invalid") {
+    const details = data.message?.toLowerCase().replace(/\s+/g, '_') || "invalid";
+    return createResult(email, firstName, "ko", details);
   }
   
   if (data.error) {
+    console.warn(`❌ API error for ${email}:`, data.error);
     return createResult(email, firstName, "md", "api_error");
   }
   
-  // Handle unknown responses
+  // Handle unknown or unexpected responses
+  console.warn(`❓ Unknown response format for ${email}:`, data);
   return createResult(email, firstName, "md", 
     data.message?.toLowerCase().replace(/\s+/g, '_') || "unknown_response"
   );
@@ -199,48 +245,83 @@ function createFailedResult(email: string): VerificationResult {
 
 function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
+  return emailRegex.test(email) && email.length <= 254;
 }
 
 function extractFirstNameFromEmail(email: string): string {
-  return email.split("@")[0]?.split('.')[0]?.split('_')[0] || "unknown";
+  const localPart = email.split("@")[0];
+  if (!localPart) return "unknown";
+  
+  // Remove numbers and special characters, then take first part
+  const namePart = localPart.replace(/[0-9_\-\.]/g, ' ').split(' ')[0];
+  return namePart || localPart.slice(0, 10); // Fallback to first 10 chars of local part
 }
 
 function arrayToCSV(data: VerificationResult[]): string {
-  if (!data?.length) return "email,firstName,status,details,timestamp";
+  if (!data?.length) return "Email,First Name,Status,Details\n";
   
-  const headers = ['email', 'firstName', 'status', 'details', 'timestamp'];
+  const headers = ['Email', 'First Name', 'Status', 'Details'];
   const csvRows = [
     headers.join(","),
-    ...data.map(row =>
-      headers
-        .map(header => {
-          const val = row[header as keyof VerificationResult];
-          if (typeof val === "string" && (val.includes(",") || val.includes("\n") || val.includes('"'))) {
-            return `"${val.replace(/"/g, '""')}"`;
-          }
-          return val ?? "";
-        })
-        .join(",")
-    ),
+    ...data.map(row => {
+      const escapedEmail = `"${row.email.replace(/"/g, '""')}"`;
+      const escapedFirstName = `"${row.firstName.replace(/"/g, '""')}"`;
+      const escapedStatus = `"${row.status.replace(/"/g, '""')}"`;
+      const escapedDetails = `"${row.details.replace(/"/g, '""')}"`;
+      
+      return [escapedEmail, escapedFirstName, escapedStatus, escapedDetails].join(",");
+    })
   ];
+  
   return csvRows.join("\n");
 }
 
+// Enhanced POST handler with comprehensive error handling
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  
   try {
-    const emails: string[] = await request.json();
+    console.log("📨 Received email verification request");
+    
+    // Parse request body
+    let emails: string[];
+    try {
+      emails = await request.json();
+    } catch (parseError) {
+      console.error("❌ JSON parse error:", parseError);
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          message: "Invalid JSON in request body",
+          error: "Invalid JSON format"
+        }), { 
+          status: 400, 
+          headers: { 
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type"
+          } 
+        }
+      );
+    }
 
     // Validate input
     if (!emails || !Array.isArray(emails) || emails.length === 0) {
-      return new Response(JSON.stringify({ 
-        success: false,
-        message: "No emails provided" 
-      }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          message: "No emails provided. Please provide an array of email addresses." 
+        }), {
+          status: 400,
+          headers: { 
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+          },
+        });
     }
+
+    console.log(`📧 Received ${emails.length} emails for verification`);
 
     // Validate and deduplicate emails
     const validEmails = emails
@@ -250,57 +331,134 @@ export async function POST(request: NextRequest) {
       .filter((email, index, self) => self.indexOf(email) === index);
 
     if (validEmails.length === 0) {
-      return new Response(JSON.stringify({ 
-        success: false,
-        message: "No valid emails provided" 
-      }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          message: "No valid email addresses provided. Please check the email formats." 
+        }), {
+          status: 400,
+          headers: { 
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+          },
+        });
     }
 
-    // Limit for performance
-    if (validEmails.length > 100) {
-      return new Response(JSON.stringify({ 
-        success: false,
-        message: "Maximum 100 emails allowed per request",
-        maxAllowed: 100 
-      }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+    console.log(`✅ ${validEmails.length} valid emails after filtering`);
+
+    // Limit for performance and cost
+    if (validEmails.length > 50) {
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          message: "Maximum 50 emails allowed per request for performance reasons",
+          maxAllowed: 50,
+          provided: validEmails.length
+        }), {
+          status: 400,
+          headers: { 
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+          },
+        });
     }
 
     // Get authentication token
-    const token = await getToken();
+    let token: string;
+    try {
+      token = await getToken();
+    } catch (tokenError) {
+      console.error("❌ Token error:", tokenError);
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          message: "Email verification service is currently unavailable. Please try again later.",
+          error: "Token acquisition failed"
+        }), { 
+          status: 503, 
+          headers: { 
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+          } 
+        }
+      );
+    }
 
     // Process emails with high concurrency
     const results = await processEmailsConcurrently(validEmails, token);
     
     const csvString = arrayToCSV(results);
+    const endTime = Date.now();
+    const processingTime = endTime - startTime;
+
+    console.log(`🎉 Verification completed in ${processingTime}ms. Processed: ${results.length}, Valid: ${results.filter(r => r.status === "ok").length}`);
 
     return new Response(csvString, {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": "attachment; filename=verified_emails.csv",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
         "X-Processed-Count": results.length.toString(),
         "X-Valid-Count": results.filter(r => r.status === "ok").length.toString(),
+        "X-Invalid-Count": results.filter(r => r.status === "ko").length.toString(),
+        "X-Unknown-Count": results.filter(r => r.status === "md").length.toString(),
+        "X-Processing-Time": processingTime.toString() + "ms",
       },
     });
 
   } catch (error: any) {
-    console.error("Verification error:", error);
+    console.error("💥 Unexpected verification error:", error);
+    const endTime = Date.now();
     
     return new Response(
       JSON.stringify({ 
         success: false,
-        message: error.message || "Internal server error",
-        error: error.toString()
+        message: "An unexpected error occurred during email verification. Please try again.",
+        error: error.message || "Internal server error",
+        processingTime: (endTime - startTime) + "ms"
       }), { 
         status: 500, 
-        headers: { "Content-Type": "application/json" } 
+        headers: { 
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type"
+        } 
       }
     );
   }
+}
+
+// Enhanced CORS handling for preflight requests
+export async function OPTIONS(request: NextRequest) {
+  return new Response(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+      'Access-Control-Max-Age': '86400',
+    },
+  });
+}
+
+// Add GET handler for health checks
+export async function GET(request: NextRequest) {
+  return new Response(
+    JSON.stringify({ 
+      status: "healthy",
+      service: "Email Verification API",
+      timestamp: new Date().toISOString(),
+      version: "2.0.0"
+    }), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*"
+      }
+    }
+  );
 }
