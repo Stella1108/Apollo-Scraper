@@ -3,9 +3,368 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Web Scraper Suite - Extract Leads & Company Data</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #f8fafc;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        header {
+            padding: 30px 0;
+            text-align: center;
+        }
+        
+        .logo {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #137fc8, #8b39ea);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: inline-block;
+        }
+        
+        .tagline {
+            font-size: 1.2rem;
+            color: #cbd5e1;
+            margin-bottom: 40px;
+        }
+        
+        .hero {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 60px 0;
+            flex-wrap: wrap;
+        }
+        
+        .hero-content {
+            flex: 1;
+            min-width: 300px;
+            padding-right: 40px;
+        }
+        
+        .hero-image {
+            flex: 1;
+            min-width: 300px;
+            text-align: center;
+        }
+        
+        .hero-image img {
+            max-width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            line-height: 1.2;
+        }
+        
+        .highlight {
+            color: #8b39ea;
+        }
+        
+        .description {
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+            color: #e2e8f0;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin: 60px 0;
+        }
+        
+        .feature-card {
+            background: rgba(30, 41, 59, 0.7);
+            border-radius: 10px;
+            padding: 30px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: 1px solid #334155;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+        
+        .feature-icon {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            color: #137fc8;
+        }
+        
+        .feature-title {
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            color: #f8fafc;
+        }
+        
+        .feature-desc {
+            color: #cbd5e1;
+        }
+        
+        .cta-section {
+            text-align: center;
+            padding: 80px 0;
+            background: linear-gradient(135deg, #1d4ed8 0%, #8b39ea 100%);
+            margin: 60px 0;
+            border-radius: 15px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .cta-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 100" preserveAspectRatio="none"><path d="M0,0 V100 Q500,50 1000,100 V0 Z" fill="rgba(255,255,255,0.1)"/></svg>');
+            background-size: cover;
+        }
+        
+        .cta-title {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+        
+        .cta-desc {
+            font-size: 1.2rem;
+            max-width: 700px;
+            margin: 0 auto 40px;
+            color: #e2e8f0;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background: #8b39ea;
+            color: white;
+            font-size: 1.3rem;
+            font-weight: 600;
+            padding: 18px 45px;
+            border-radius: 50px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(139, 57, 234, 0.4);
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+        }
+        
+        .cta-button:hover {
+            background: #7a2bc2;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(139, 57, 234, 0.6);
+        }
+        
+        .cta-button:active {
+            transform: translateY(1px);
+        }
+        
+        .steps {
+            display: flex;
+            justify-content: space-between;
+            margin: 60px 0;
+            flex-wrap: wrap;
+        }
+        
+        .step {
+            flex: 1;
+            min-width: 200px;
+            text-align: center;
+            padding: 20px;
+            position: relative;
+        }
+        
+        .step-number {
+            display: inline-block;
+            width: 50px;
+            height: 50px;
+            background: #137fc8;
+            color: white;
+            border-radius: 50%;
+            line-height: 50px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        
+        .step-title {
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+        }
+        
+        .step-desc {
+            color: #cbd5e1;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 40px 0;
+            border-top: 1px solid #334155;
+            margin-top: 60px;
+            color: #94a3b8;
+        }
+        
+        @media (max-width: 768px) {
+            .hero {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .hero-content {
+                padding-right: 0;
+                margin-bottom: 40px;
+            }
+            
+            h1 {
+                font-size: 2.3rem;
+            }
+            
+            .cta-title {
+                font-size: 2rem;
+            }
+        }
+    </style>
 </head>
 <body>
-    
+    <div class="container">
+        <header>
+            <div class="logo">Web Scraper Suite</div>
+            <div class="tagline">Extract Leads & Company Data Effortlessly</div>
+        </header>
+        
+        <section class="hero">
+            <div class="hero-content">
+                <h1>Automate Your <span class="highlight">Lead Generation</span> with Powerful Web Scraping</h1>
+                <p class="description">Our advanced scraper lets you automatically extract key information from websites with ease. Simply upload a file of URLs, configure your extraction preferences, and get detailed results in minutes.</p>
+                
+                <div class="features">
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-envelope"></i>
+                        </div>
+                        <h3 class="feature-title">Extract Contact Information</h3>
+                        <p class="feature-desc">Gather emails, phone numbers, and social profiles from any website with precision.</p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-file-export"></i>
+                        </div>
+                        <h3 class="feature-title">Export in Multiple Formats</h3>
+                        <p class="feature-desc">Download your data in CSV, JSON, or Excel formats for easy integration with your tools.</p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-sync-alt"></i>
+                        </div>
+                        <h3 class="feature-title">Customizable Retries</h3>
+                        <p class="feature-desc">Configure retry logic to ensure you capture all data even from challenging websites.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="hero-image">
+                <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1170&q=80" alt="Data Visualization">
+            </div>
+        </section>
+        
+        <section class="steps">
+            <div class="step">
+                <div class="step-number">1</div>
+                <h3 class="step-title">Upload URLs</h3>
+                <p class="step-desc">Upload your list of URLs in CSV, TXT, or XLSX format</p>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">2</div>
+                <h3 class="step-title">Configure Settings</h3>
+                <p class="step-desc">Set your extraction preferences and data points to collect</p>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">3</div>
+                <h3 class="step-title">Start Scraping</h3>
+                <p class="step-desc">Initiate the scraping process and monitor progress in real-time</p>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">4</div>
+                <h3 class="step-title">Export Results</h3>
+                <p class="step-desc">Download your structured data and grow your lead database</p>
+            </div>
+        </section>
+        
+        <section class="cta-section">
+            <h2 class="cta-title">Ready to Transform Your Lead Generation?</h2>
+            <p class="cta-desc">Join thousands of marketers and sales professionals who use our Web Scraper Suite to build targeted prospect lists efficiently.</p>
+            <a href="https://work-scrapper.onrender.com" class="cta-button" target="_blank">
+                <i class="fas fa-rocket"></i> Go to Work Scraper
+            </a>
+        </section>
+        
+        <footer>
+            <p>&copy; 2023 Web Scraper Suite. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script>
+        // Add some interactive animations
+        document.addEventListener('DOMContentLoaded', function() {
+            // Animate feature cards on scroll
+            const featureCards = document.querySelectorAll('.feature-card');
+            
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.style.opacity = '1';
+                        entry.target.style.transform = 'translateY(0)';
+                    }
+                });
+            }, { threshold: 0.1 });
+            
+            featureCards.forEach(card => {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(20px)';
+                card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+                observer.observe(card);
+            });
+            
+            // Add pulse animation to CTA button
+            const ctaButton = document.querySelector('.cta-button');
+            
+            setInterval(() => {
+                ctaButton.style.transform = 'scale(1.05)';
+                setTimeout(() => {
+                    ctaButton.style.transform = 'scale(1)';
+                }, 500);
+            }, 3000);
+        });
+    </script>
 </body>
 </html>
