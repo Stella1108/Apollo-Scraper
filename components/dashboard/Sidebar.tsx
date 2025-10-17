@@ -17,6 +17,8 @@ import {
   CircleHelp as HelpCircle,
   ChevronLeft,
   ChevronRight,
+  Sparkles,
+  Orbit,
 } from "lucide-react";
 
 export interface SidebarTab {
@@ -111,41 +113,52 @@ export function Sidebar({
           collapsed ? "w-25 min-w-[50px]" : "w-[15.75rem] min-w-[200px]"
         )}
       >
+        {/* Enhanced Header Section */}
         <div
-          className="flex items-center justify-between px-6 py-4 border-b border-slate-200 relative"
+          className="flex items-center justify-between px-6 py-4 border-b border-slate-200 relative bg-gradient-to-r from-slate-50 to-white"
           style={{ minHeight: 75 }}
         >
-          <div className="flex items-center gap-2 select-none whitespace-nowrap overflow-hidden">
-            <div className="p-2 bg-gradient-to-br from-blue-600 to-cyan-600 rounded-lg shadow-md flex-shrink-0 transition-transform duration-300">
-              <Rocket
-                className={cn("w-6 h-6 text-white", collapsed ? "scale-90" : "scale-100")}
-              />
+          <div className="flex items-center gap-3 select-none whitespace-nowrap overflow-hidden">
+            {/* Enhanced Icon Container */}
+            <div className="relative flex-shrink-0">
+              <div className="relative p-2 bg-gradient-to-br from-purple-600 via-blue-600 to-cyan-500 rounded-xl shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105">
+                <Orbit className="w-6 h-6 text-white" />
+                {/* Animated orbiting dot */}
+                <div className="absolute -top-1 -right-1">
+                  <div className="w-2 h-2 bg-yellow-400 rounded-full animate-ping"></div>
+                  <div className="w-2 h-2 bg-yellow-400 rounded-full absolute top-0 right-0"></div>
+                </div>
+              </div>
+              
+              {/* Optional: Small sparkle effect */}
+              <Sparkles className="absolute -top-1 -right-1 w-3 h-3 text-yellow-400 animate-pulse" />
             </div>
-            <span
-              className={cn(
-                "text-xl font-bold bg-gradient-to-r from-blue-500 via-purple-600 to-indigo-700 bg-clip-text text-transparent transition-opacity duration-300",
-                collapsed ? "opacity-0 max-w-0 overflow-hidden" : "opacity-100 max-w-full"
-              )}
-              style={{
-                backgroundClip: "text",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                transitionProperty: "opacity, max-width",
-              }}
-            >
-              Apollo Scraper
-            </span>
+
+            {/* Enhanced Text */}
+            <div className={cn(
+              "flex flex-col transition-all duration-300 overflow-hidden",
+              collapsed ? "opacity-0 max-w-0" : "opacity-100 max-w-full"
+            )}>
+              <span className="text-2xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent leading-tight">
+                Globo Polo
+              </span>
+              <span className="text-xs text-slate-500 font-medium bg-gradient-to-r from-slate-600 to-slate-500 bg-clip-text text-transparent">
+                Global Solutions
+              </span>
+            </div>
           </div>
+
+          {/* Collapse Button */}
           <button
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             onClick={onToggleCollapse}
-            className="p-1 rounded-md hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 absolute top-4 right-0 translate-x-1/2"
+            className="p-2 rounded-lg hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 absolute top-4 right-0 translate-x-1/2 transition-all duration-200 hover:scale-110"
             type="button"
           >
             {collapsed ? (
-              <ChevronRight className="w-5 h-5 text-slate-600 transition-transform duration-300" />
+              <ChevronRight className="w-4 h-4 text-slate-600" />
             ) : (
-              <ChevronLeft className="w-5 h-5 text-slate-600 transition-transform duration-300" />
+              <ChevronLeft className="w-4 h-4 text-slate-600" />
             )}
           </button>
         </div>
@@ -169,30 +182,51 @@ export function Sidebar({
                   onMouseLeave={() => setHoveredTab(null)}
                   
                   className={cn(
-                    "group relative flex w-full select-none items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-left transition-colors duration-200 outline-none",
+                    "group relative flex w-full select-none items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-left transition-all duration-200 outline-none",
                     isActive
-                      ? "bg-gradient-to-r from-blue-50 to-cyan-50 text-blue-700 shadow-sm"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      ? "bg-gradient-to-r from-blue-50 to-cyan-50 text-blue-700 shadow-sm border border-blue-100"
+                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 hover:shadow-md"
                   )}
                 >
-                  <Icon
-                    className={cn(
-                      "flex-shrink-0 transition-transform duration-300",
-                      isActive ? "text-blue-600" : "text-slate-400",
-                      collapsed ? "mx-auto" : ""
-                    )}
-                  />
-                  {!collapsed && <span>{tab.label}</span>}
+                  <div className={cn(
+                    "p-1.5 rounded-lg transition-all duration-200",
+                    isActive 
+                      ? "bg-gradient-to-br from-blue-500 to-cyan-500 text-white shadow-sm" 
+                      : "bg-slate-100 text-slate-600 group-hover:bg-slate-200 group-hover:scale-105"
+                  )}>
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                  </div>
+                  
+                  {!collapsed && (
+                    <span className="font-medium transition-all duration-200">
+                      {tab.label}
+                    </span>
+                  )}
 
                   {collapsed && isHovered && buttonRefs.current[tab.id] && (
                     <TooltipPortal anchorRef={{ current: buttonRefs.current[tab.id] }}>
                       {tab.label}
                     </TooltipPortal>
                   )}
+
+                  {/* Active indicator dot */}
+                  {isActive && (
+                    <div className="absolute right-3 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                  )}
                 </button>
               );
             })}
           </div>
+
+          {/* Optional: Footer section */}
+          {!collapsed && (
+            <div className="px-3 pt-4 mt-4 border-t border-slate-200">
+              <div className="text-xs text-slate-500 text-center">
+                <div className="font-semibold text-slate-700 mb-1">Globo Polo Suite</div>
+                <div className="text-slate-400">v2.1.0 • Professional</div>
+              </div>
+            </div>
+          )}
         </nav>
       </div>
     </div>

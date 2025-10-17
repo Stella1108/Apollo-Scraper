@@ -6,37 +6,215 @@ const VERIFY_URL_BASE = "https://happy.mailtester.ninja/ninja";
 interface VerificationResult {
   email: string;
   firstName: string;
-  status: string;
+  status: "ok" | "ko" | "md";
   details: string;
+  timestamp: number;
 }
 
 interface NinjaVerifierResponse {
   code?: string;
   message?: string;
   valid?: boolean;
-  status?: string;
   is_valid?: boolean;
+  status?: string;
   result?: string;
-  is_disposable?: boolean;
-  is_catch_all?: boolean;
-  is_spam?: boolean;
-  is_role_account?: boolean;
-  risk?: string;
   error?: string;
-  mx?: boolean;
+}
+
+// ✅ Cache token for 24 hours
+let cachedToken: { token: string; expiry: number } | null = null;
+
+async function getToken(): Promise<string> {
+  const apiKey = process.env.NINJA_EMAIL_VERIFIER_API_KEY;
+  if (!apiKey) {
+    throw new Error("NINJA_EMAIL_VERIFIER_API_KEY is not configured");
+  }
+
+  // Return cached token if valid
+  if (cachedToken && Date.now() < cachedToken.expiry) {
+    return cachedToken.token;
+  }
+
+  try {
+    const tokenResponse = await fetch(`${TOKEN_URL}${apiKey}`);
+    if (!tokenResponse.ok) {
+      throw new Error(`Token fetch failed: ${tokenResponse.status}`);
+    }
+
+    const tokenData = await tokenResponse.json();
+    
+    if (!tokenData.token) {
+      throw new Error("No token received from API");
+    }
+
+    // Cache token for 23 hours (with 1 hour buffer)
+    cachedToken = {
+      token: tokenData.token,
+      expiry: Date.now() + 23 * 60 * 60 * 1000
+    };
+
+    return tokenData.token;
+  } catch (error) {
+    console.error("Token acquisition error:", error);
+    throw new Error(`Failed to get verification token: ${error}`);
+  }
+}
+
+// ✅ High-performance batch processing
+async function processEmailsConcurrently(emails: string[], token: string): Promise<VerificationResult[]> {
+  const CONCURRENT_REQUESTS = 15; // Process 15 emails simultaneously
+  const results: VerificationResult[] = [];
+  
+  // Process in concurrent groups
+  for (let i = 0; i < emails.length; i += CONCURRENT_REQUESTS) {
+    const batch = emails.slice(i, i + CONCURRENT_REQUESTS);
+    
+    const batchPromises = batch.map(email => 
+      verifySingleEmailWithRetry(email, token, 2) // 2 retries
+    );
+
+    try {
+      const batchResults = await Promise.all(batchPromises);
+      results.push(...batchResults);
+      
+      // Small delay between batches to respect rate limits
+      if (i + CONCURRENT_REQUESTS < emails.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    } catch (error) {
+      // If batch fails, add failed results and continue
+      const failedResults = batch.map(email => createFailedResult(email));
+      results.push(...failedResults);
+    }
+  }
+
+  return results;
+}
+
+// ✅ Robust email verification with retry logic
+async function verifySingleEmailWithRetry(
+  email: string, 
+  token: string, 
+  maxRetries: number = 2
+): Promise<VerificationResult> {
+  const firstName = extractFirstNameFromEmail(email);
+  
+  if (!isValidEmail(email)) {
+    return createResult(email, firstName, "ko", "invalid_format");
+  }
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const url = `${VERIFY_URL_BASE}?email=${encodeURIComponent(email)}&token=${token}`;
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'NinjaEmailVerifier/2.0',
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache'
+        }
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data: NinjaVerifierResponse = await response.json();
+      
+      // Map Ninja Verifier response to our status
+      return mapNinjaResponseToResult(email, firstName, data);
+
+    } catch (error) {
+      console.warn(`Attempt ${attempt} failed for ${email}:`, error);
+      
+      if (attempt === maxRetries) {
+        return createResult(email, firstName, "md", 
+          error instanceof Error && error.name === 'AbortError' ? "timeout" : "api_error"
+        );
+      }
+      
+      // Wait before retry (exponential backoff)
+      await new Promise(resolve => setTimeout(resolve, attempt * 500));
+    }
+  }
+
+  return createResult(email, firstName, "md", "max_retries_exceeded");
+}
+
+// ✅ Map Ninja Verifier API response to our format
+function mapNinjaResponseToResult(
+  email: string, 
+  firstName: string, 
+  data: NinjaVerifierResponse
+): VerificationResult {
+  // Handle different response formats from Ninja API
+  if (data.code === "ok" || data.valid === true || data.is_valid === true) {
+    return createResult(email, firstName, "ok", 
+      data.message?.toLowerCase().replace(/\s+/g, '_') || "valid"
+    );
+  }
+  
+  if (data.code === "ko" || data.valid === false || data.is_valid === false) {
+    return createResult(email, firstName, "ko", 
+      data.message?.toLowerCase().replace(/\s+/g, '_') || "invalid"
+    );
+  }
+  
+  if (data.error) {
+    return createResult(email, firstName, "md", "api_error");
+  }
+  
+  // Handle unknown responses
+  return createResult(email, firstName, "md", 
+    data.message?.toLowerCase().replace(/\s+/g, '_') || "unknown_response"
+  );
+}
+
+function createResult(email: string, firstName: string, status: "ok" | "ko" | "md", details: string): VerificationResult {
+  return {
+    email,
+    firstName,
+    status,
+    details,
+    timestamp: Date.now()
+  };
+}
+
+function createFailedResult(email: string): VerificationResult {
+  return {
+    email,
+    firstName: extractFirstNameFromEmail(email),
+    status: "md",
+    details: "verification_failed",
+    timestamp: Date.now()
+  };
+}
+
+function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+function extractFirstNameFromEmail(email: string): string {
+  return email.split("@")[0]?.split('.')[0]?.split('_')[0] || "unknown";
 }
 
 function arrayToCSV(data: VerificationResult[]): string {
-  if (!data?.length) return "email,firstName,status,details";
+  if (!data?.length) return "email,firstName,status,details,timestamp";
   
-  const headers: (keyof VerificationResult)[] = ['email', 'firstName', 'status', 'details'];
-  
+  const headers = ['email', 'firstName', 'status', 'details', 'timestamp'];
   const csvRows = [
     headers.join(","),
-    ...data.map((row) =>
+    ...data.map(row =>
       headers
-        .map((h) => {
-          const val = row[h];
+        .map(header => {
+          const val = row[header as keyof VerificationResult];
           if (typeof val === "string" && (val.includes(",") || val.includes("\n") || val.includes('"'))) {
             return `"${val.replace(/"/g, '""')}"`;
           }
@@ -48,338 +226,55 @@ function arrayToCSV(data: VerificationResult[]): string {
   return csvRows.join("\n");
 }
 
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-function extractFirstNameFromEmail(email: string): string {
-  return email.split("@")[0]?.split('.')[0] || "";
-}
-
-function mapMessageToDetail(message?: string): string {
-  if (!message) return "unknown";
-  
-  const messageLower = message.toLowerCase();
-  
-  const messageMap: { [key: string]: string } = {
-    "accepted": "accept",
-    "valid": "accept", 
-    "rejected": "reject",
-    "invalid": "reject",
-    "spam": "spam_block",
-    "spam block": "spam_block",
-    "disposable": "disposable",
-    "catch all": "catch_all",
-    "catch-all": "catch_all",
-    "role": "role_account",
-    "role account": "role_account",
-    "timeout": "timeout",
-    "unverifiable": "unverifiable",
-    "unknown": "unknown",
-    "limited": "limited",
-    "mx error": "mx_error",
-    "no mx": "no_mx",
-    "high risk": "high_risk",
-    "medium risk": "medium_risk",
-    "low risk": "low_risk",
-    "accept": "accept",
-    "reject": "reject"
-  };
-  
-  for (const [key, value] of Object.entries(messageMap)) {
-    if (messageLower === key.toLowerCase() || messageLower.includes(key.toLowerCase())) {
-      return value;
-    }
-  }
-  
-  return messageLower.replace(/\s+/g, '_');
-}
-
-async function verifyEmail(email: string, token: string): Promise<VerificationResult> {
-  const firstName = extractFirstNameFromEmail(email);
-  
-  if (!isValidEmail(email)) {
-    return { 
-      email, 
-      firstName, 
-      status: "ko", 
-      details: "invalid_format" 
-    };
-  }
-
-  const url = `${VERIFY_URL_BASE}?email=${encodeURIComponent(email)}&token=${token}`;
-  
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-    
-    console.log(`🔍 Verifying: ${email}`);
-    const res = await fetch(url, { 
-      signal: controller.signal 
-    });
-    
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      console.log(`❌ API Error for ${email}: ${res.status}`);
-      return { 
-        email, 
-        firstName, 
-        status: "md",
-        details: "service_error" 
-      };
-    }
-    
-    const data: NinjaVerifierResponse = await res.json();
-    
-    console.log(`📨 API Response for ${email}:`, JSON.stringify(data));
-    
-    let status = "md";
-    let details = "unknown";
-
-    if (data.code === "ok") {
-      status = "ok";
-      details = mapMessageToDetail(data.message);
-    } 
-    else if (data.code === "ko") {
-      status = "ko";
-      details = mapMessageToDetail(data.message);
-    }
-    else if (data.code === "mb") {
-      status = "md";
-      details = mapMessageToDetail(data.message);
-    }
-    else if (data.valid === true || data.is_valid === true) {
-      status = "ok";
-      details = "accept";
-    }
-    else if (data.valid === false || data.is_valid === false) {
-      status = "ko";
-      details = "reject";
-    }
-    else if (data.is_disposable === true) {
-      status = "ko";
-      details = "disposable";
-    }
-    else if (data.is_catch_all === true) {
-      status = "ok";
-      details = "catch_all";
-    }
-    else if (data.is_catch_all === false) {
-      status = "md";
-      details = "no_catch_all";
-    }
-    else if (data.is_spam === true) {
-      status = "ko";
-      details = "spam_block";
-    }
-    else if (data.is_role_account === true) {
-      status = "md";
-      details = "role_account";
-    }
-    else if (data.risk === "high") {
-      status = "ko";
-      details = "high_risk";
-    }
-    else if (data.risk === "medium") {
-      status = "md";
-      details = "medium_risk";
-    }
-    else if (data.risk === "low") {
-      status = "ok";
-      details = "low_risk";
-    }
-    else if (data.status === "valid" || data.result === "valid") {
-      status = "ok";
-      details = "accept";
-    }
-    else if (data.status === "invalid" || data.result === "invalid") {
-      status = "ko";
-      details = "reject";
-    }
-    else if (data.mx === false) {
-      status = "ko";
-      details = "no_mx";
-    }
-    else if (data.error) {
-      status = "md";
-      details = "api_error";
-    }
-    else {
-      status = "md";
-      details = data.message ? data.message.toLowerCase().replace(/\s+/g, '_') : "unknown";
-    }
-    
-    console.log(`✅ Final status for ${email}: ${status} - ${details}`);
-    
-    return { 
-      email, 
-      firstName, 
-      status, 
-      details
-    };
-    
-  } catch (error: any) {
-    console.log(`💥 Network error for ${email}:`, error.message);
-    
-    let errorDetail = "timeout";
-    if (error.name === 'AbortError') {
-      errorDetail = "timeout";
-    } else if (error.message.includes('fetch failed') || error.message.includes('network')) {
-      errorDetail = "network_error";
-    } else {
-      errorDetail = "verification_error";
-    }
-    
-    return { 
-      email, 
-      firstName, 
-      status: "md", 
-      details: errorDetail 
-    };
-  }
-}
-
-async function verifyEmailsInBatches(
-  emails: string[],
-  token: string,
-  batchSize = 25,
-  delayBetweenBatches = 800
-): Promise<VerificationResult[]> {
-  const results: VerificationResult[] = [];
-  
-  for (let i = 0; i < emails.length; i += batchSize) {
-    const batch = emails.slice(i, i + batchSize);
-    console.log(`🔄 Processing batch ${Math.floor(i/batchSize) + 1} with ${batch.length} emails`);
-    
-    const batchPromises = batch.map(email => verifyEmail(email, token));
-    const batchResults = await Promise.allSettled(batchPromises);
-    
-    const successfulResults = batchResults
-      .filter((result): result is PromiseFulfilledResult<VerificationResult> => 
-        result.status === 'fulfilled'
-      )
-      .map(result => result.value);
-    
-    results.push(...successfulResults);
-    
-    console.log(`✅ Batch ${Math.floor(i/batchSize) + 1} completed: ${successfulResults.length}/${batch.length} successful`);
-    
-    if (i + batchSize < emails.length) {
-      await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
-    }
-  }
-  
-  return results;
-}
-
-export async function POST(request: NextRequest): Promise<Response> {
+export async function POST(request: NextRequest) {
   try {
     const emails: string[] = await request.json();
 
+    // Validate input
     if (!emails || !Array.isArray(emails) || emails.length === 0) {
-      return new Response(JSON.stringify({ message: "No emails provided" }), {
+      return new Response(JSON.stringify({ 
+        success: false,
+        message: "No emails provided" 
+      }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
 
+    // Validate and deduplicate emails
     const validEmails = emails
       .filter(email => typeof email === 'string' && email.trim().length > 0)
       .map(email => email.trim().toLowerCase())
+      .filter(email => isValidEmail(email))
       .filter((email, index, self) => self.indexOf(email) === index);
 
     if (validEmails.length === 0) {
-      return new Response(JSON.stringify({ message: "No valid emails provided" }), {
+      return new Response(JSON.stringify({ 
+        success: false,
+        message: "No valid emails provided" 
+      }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    if (validEmails.length > 50000) {
-      return new Response(JSON.stringify({ message: "Maximum 50,000 emails allowed" }), {
+    // Limit for performance
+    if (validEmails.length > 500) {
+      return new Response(JSON.stringify({ 
+        success: false,
+        message: "Maximum 500 emails allowed per request",
+        maxAllowed: 500 
+      }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    const apiKey = process.env.NINJA_EMAIL_VERIFIER_API_KEY;
-    if (!apiKey) {
-      console.error("NINJA_EMAIL_VERIFIER_API_KEY is not set");
-      return new Response(JSON.stringify({ message: "Server error: missing API key" }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+    // Get authentication token
+    const token = await getToken();
 
-    let token: string;
-    try {
-      console.log("🔑 Fetching token from NinjaVerifier...");
-      const tokenResponse = await fetch(`${TOKEN_URL}${apiKey}`);
-      if (!tokenResponse.ok) {
-        const errorText = await tokenResponse.text();
-        console.error("Token fetch failed:", tokenResponse.status, errorText);
-        return new Response(
-          JSON.stringify({ 
-            message: "Failed to get verification token", 
-            details: errorText 
-          }),
-          { 
-            status: tokenResponse.status, 
-            headers: { "Content-Type": "application/json" } 
-          }
-        );
-      }
-
-      const tokenJson = await tokenResponse.json();
-      token = tokenJson.token;
-      
-      if (!token) {
-        console.error("No token received from NinjaVerifier");
-        return new Response(
-          JSON.stringify({ message: "Token not received from verification service" }),
-          { 
-            status: 500, 
-            headers: { "Content-Type": "application/json" } 
-          }
-        );
-      }
-      
-      console.log("✅ Token received successfully");
-    } catch (error) {
-      console.error("Token fetch error:", error);
-      return new Response(
-        JSON.stringify({ 
-          message: "Failed to connect to verification service",
-          details: String(error)
-        }),
-        { 
-          status: 503, 
-          headers: { "Content-Type": "application/json" } 
-        }
-      );
-    }
-
-    console.log(`🚀 Starting verification for ${validEmails.length} emails`);
-    
-    const results = await verifyEmailsInBatches(validEmails, token, 25, 800);
-
-    console.log(`🎉 Verification completed: ${results.length} results`);
-    
-    const statusCounts = results.reduce((acc, result) => {
-      const statusKey = result.status;
-      acc[statusKey] = (acc[statusKey] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const detailCounts = results.reduce((acc, result) => {
-      const detailKey = result.details;
-      acc[detailKey] = (acc[detailKey] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    
-    console.log('📊 Status summary:', statusCounts);
-    console.log('📈 Details summary:', detailCounts);
+    // Process emails with high concurrency
+    const results = await processEmailsConcurrently(validEmails, token);
     
     const csvString = arrayToCSV(results);
 
@@ -388,16 +283,20 @@ export async function POST(request: NextRequest): Promise<Response> {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": "attachment; filename=verified_emails.csv",
+        "X-Processed-Count": results.length.toString(),
+        "X-Valid-Count": results.filter(r => r.status === "ok").length.toString(),
       },
     });
-  } catch (error) {
-    console.error("💥 Unexpected error in verification:", error);
+
+  } catch (error: any) {
+    console.error("Verification error:", error);
+    
     return new Response(
       JSON.stringify({ 
-        message: "Internal server error", 
-        error: String(error) 
-      }),
-      { 
+        success: false,
+        message: error.message || "Internal server error",
+        error: error.toString()
+      }), { 
         status: 500, 
         headers: { "Content-Type": "application/json" } 
       }

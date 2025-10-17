@@ -9,6 +9,7 @@ import { ApolloScraperTab } from "@/components/dashboard/tabs/ApolloScraperTab";
 import { EmailVerifierTab } from "@/components/dashboard/tabs/EmailVerifierTab";
 import { CustomListTab } from "@/components/dashboard/tabs/CustomListTab";
 import { BillingTab } from "@/components/dashboard/tabs/BillingTab";
+import { WebScrapingTab } from "@/components/dashboard/tabs/WebScrapingTab";
 import { ComingSoonTab } from "@/components/dashboard/tabs/ComingSoonTab";
 import { Loader as Loader2 } from "lucide-react";
 
@@ -24,6 +25,10 @@ export default function DashboardPage() {
       router.push("/login");
     }
   }, [user, loading, router]);
+
+  const handleToggleCollapse = () => {
+    setCollapsed(!collapsed);
+  };
 
   if (loading) {
     return (
@@ -46,6 +51,8 @@ export default function DashboardPage() {
         return <EmailVerifierTab user={user} />;
       case "custom-list":
         return <CustomListTab user={user} />;
+      case "web-scraping":
+        return <WebScrapingTab user={user} />;
       case "billing":
         return <BillingTab user={user} />;
       case "email-warmup":
@@ -53,13 +60,6 @@ export default function DashboardPage() {
           <ComingSoonTab
             title="Email Warm-up"
             description="Gradually increase email sending volume to improve deliverability"
-          />
-        );
-      case "web-scraping":
-        return (
-          <ComingSoonTab
-            title="Web Scraping"
-            description="Extract data from any website with our powerful scraping engine"
           />
         );
       case "sales-navigator":
@@ -102,30 +102,29 @@ export default function DashboardPage() {
     }
   };
 
-  // Sidebar widths (in pixels, match your Sidebar widths)
-  const sidebarExpandedWidth = 0.75 * 16;     // 300px
-  const sidebarCollapsedWidth = 2.625 * 16;    // 90px
-  const marginLeft = collapsed ? sidebarCollapsedWidth : sidebarExpandedWidth;
-
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      <aside>
+    <div className="min-h-screen bg-slate-50 grid transition-all duration-350 ease-in-out"
+      style={{ 
+        gridTemplateColumns: collapsed ? '6rem 1fr' : '16rem 1fr'
+      }}
+    >
+      {/* Sidebar */}
+      <div className="h-full">
         <Sidebar
           activeTab={activeTab}
           onTabChange={setActiveTab}
           collapsed={collapsed}
-          onToggleCollapse={() => setCollapsed(!collapsed)}
+          onToggleCollapse={handleToggleCollapse}
         />
-      </aside>
-      <main
-        className="flex-1 flex flex-col min-w-0 transition-margin duration-300"
-        style={{ marginLeft }}
-      >
+      </div>
+
+      {/* Main content */}
+      <div className="flex flex-col min-w-0 overflow-hidden">
         <Header collapsed={collapsed} />
         <div className="flex-1 overflow-y-auto">
           <div className="p-2">{renderTabContent()}</div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

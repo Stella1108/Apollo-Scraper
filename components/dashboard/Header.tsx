@@ -18,12 +18,6 @@ interface HeaderProps {
 }
 
 export function Header({ collapsed }: HeaderProps) {
-  // Sidebar widths in px (must match Sidebar's widths)
-  const expandedWidthPx = 10; // 18.75rem * 16
-  const collapsedWidthPx = 15; // 5.625rem * 16 approx
-
-  const leftPadding = collapsed ? collapsedWidthPx : expandedWidthPx;
-
   const { user, signOut } = useAuth();
 
   const getInitials = () => {
@@ -39,14 +33,7 @@ export function Header({ collapsed }: HeaderProps) {
   };
 
   return (
-    <header
-      className="h-16 border-b border-slate-100 bg-white flex items-center justify-between px-6 transition-all duration-300"
-      style={{
-        paddingLeft: leftPadding,
-        width: `calc(80vw - ${leftPadding}px)`, // full viewport width minus sidebar
-        boxSizing: "border-box",
-      }}
-    >
+    <header className="h-16 border-b border-slate-100 bg-white flex items-center justify-between px-6 w-full">
       <h1 className="text-2xl font-bold select-none bg-gradient-to-r from-blue-500 via-purple-600 to-indigo-700 bg-clip-text text-transparent text-center">
         Dashboard
       </h1>

@@ -30,6 +30,9 @@ import {
   WifiOff,
   Globe,
   MailX,
+  Sparkles,
+  Rocket,
+  BarChart3,
 } from "lucide-react";
 
 interface User {
@@ -47,6 +50,14 @@ interface VerificationResult {
 interface EmailVerifierTabProps {
   user: User;
 }
+
+// Custom color palette
+const COLORS = {
+  purple: "#8b39ea",
+  lightBlue: "#137fc8", 
+  darkBlue: "#1d4ed8",
+  gradient: "linear-gradient(135deg, #8b39ea 0%, #137fc8 50%, #1d4ed8 100%)",
+};
 
 const statusPresets = {
   ok: {
@@ -75,7 +86,7 @@ const statusPresets = {
   },
 };
 
-// Complete icon mapping for all Ninja Verifier statuses
+// Complete icon mapping for all email verifier statuses
 const detailIcons: { [key: string]: any } = {
   // Valid statuses
   "accept": CheckCircle2,
@@ -109,6 +120,7 @@ const detailIcons: { [key: string]: any } = {
   "verification_failed": XCircleIcon,
   "api_error": AlertTriangle,
   "limited": AlertTriangle,
+  "chunk_verification_failed": AlertTriangle,
 };
 
 export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
@@ -119,6 +131,7 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
   const [csvBlobUrl, setCsvBlobUrl] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [processedCount, setProcessedCount] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
 
   const extractFirstNameFromEmail = (email: string): string =>
     email.split("@")[0]?.split(".")[0] || "";
@@ -137,45 +150,13 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
       setFileEmails(parsedEmails);
       if (parsedEmails.length > 0) {
         setEmails(parsedEmails.join("\n"));
+        toast.success(`📁 Loaded ${parsedEmails.length} emails from file`);
       }
     };
     reader.readAsText(file);
   };
 
-  // Enhanced API call with better error handling
-  const verifyAllEmailsAtOnce = async (emails: string[]): Promise<VerificationResult[]> => {
-    try {
-      console.log("🔄 Starting verification for", emails.length, "emails");
-      
-      const response = await fetch("/api/verify-emails", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(emails),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("❌ API Error:", response.status, errorText);
-        throw new Error(`Verification failed: ${response.status} - ${errorText}`);
-      }
-
-      const csvData = await response.text();
-      console.log("✅ Received verification results");
-      return parseCSVToResults(csvData);
-    } catch (error) {
-      console.error("💥 Verification error:", error);
-      toast.error("Failed to connect to verification service");
-      return emails.map((email) => ({
-        email,
-        status: "md" as const,
-        details: "verification_failed",
-      }));
-    }
-  };
-
-  // Improved CSV parsing
+  // Enhanced CSV parsing
   const parseCSVToResults = (csvData: string): VerificationResult[] => {
     const lines = csvData.split("\n").filter((line) => line.trim());
     const results: VerificationResult[] = [];
@@ -205,26 +186,88 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
     return results;
   };
 
-  // Enhanced verification with real progress
+  // Chunked verification implementation
+  const verifyAllEmailsAtOnce = async (emails: string[]): Promise<VerificationResult[]> => {
+    try {
+      console.log("🔄 Starting chunked verification for", emails.length, "emails");
+      
+      // Process in smaller chunks
+      const CHUNK_SIZE = 25; // Reduced chunk size for better reliability
+      const chunks = [];
+      
+      for (let i = 0; i < emails.length; i += CHUNK_SIZE) {
+        chunks.push(emails.slice(i, i + CHUNK_SIZE));
+      }
+
+      const allResults: VerificationResult[] = [];
+      
+      for (let i = 0; i < chunks.length; i++) {
+        console.log(`📦 Processing chunk ${i + 1}/${chunks.length}`);
+        
+        const response = await fetch("/api/verify-emails", {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(chunks[i]),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`❌ Chunk ${i + 1} failed:`, response.status);
+          
+          // Add fallback results for failed chunk
+          const chunkResults = chunks[i].map((email) => ({
+            email,
+            status: "md" as const,
+            details: "chunk_verification_failed",
+          }));
+          allResults.push(...chunkResults);
+          continue; // Continue with next chunks instead of failing completely
+        }
+
+        const csvData = await response.text();
+        const chunkResults = parseCSVToResults(csvData);
+        allResults.push(...chunkResults);
+        
+        // Update progress between chunks
+        setProcessedCount(Math.min((i + 1) * CHUNK_SIZE, emails.length));
+        setProgress(((i + 1) / chunks.length) * 100);
+        
+        // Small delay to avoid rate limiting
+        if (i < chunks.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+
+      console.log("✅ All chunks processed successfully");
+      return allResults;
+    } catch (error) {
+      console.error("💥 Verification error:", error);
+      toast.error("Partial verification failure - some emails may not be verified");
+      
+      // Return fallback results for all emails
+      return emails.map((email) => ({
+        email,
+        status: "md" as const,
+        details: "verification_failed",
+      }));
+    }
+  };
+
+  // Enhanced verification with chunked processing
   const verifyEmailsUltraFast = async (emailsToVerify: string[]): Promise<VerificationResult[]> => {
     const totalEmails = emailsToVerify.length;
-    let processed = 0;
-
-    // Real progress tracking
-    const progressInterval = setInterval(() => {
-      setProcessedCount(processed);
-      setProgress(Math.min(90, (processed / totalEmails) * 100));
-    }, 100);
-
+    
     try {
+      console.log("🚀 Starting chunked bulk verification...");
       const allResults = await verifyAllEmailsAtOnce(emailsToVerify);
-      processed = totalEmails;
-      clearInterval(progressInterval);
+      
       setProgress(100);
       setProcessedCount(totalEmails);
       return allResults;
     } catch (error) {
-      clearInterval(progressInterval);
+      console.error("Chunked verification failed:", error);
       setProgress(100);
       throw error;
     }
@@ -297,9 +340,11 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
       const mdCount = allResults.filter((r) => r.status === "md").length;
 
       toast.success(
-        `✅ Verified ${allResults.length} emails in ${timeTaken}s! 
+        `🎉 Verified ${allResults.length} emails in ${timeTaken}s! 
         ${okCount} ACCEPT • ${koCount} REJECT • ${mdCount} UNKNOWN`,
-        { duration: 6000 }
+        { 
+          duration: 6000,
+        }
       );
 
       console.log("🎉 Verification completed successfully");
@@ -323,10 +368,12 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(csvBlobUrl), 1000);
+    toast.success("📥 Results downloaded successfully!");
   };
 
-  const gradientTextClass = "text-4xl font-extrabold mb-3 bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-500 bg-clip-text text-transparent select-none shadow-lg drop-shadow";
-  const subHeadingClass = "text-lg font-medium bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent mb-4 px-1";
+  // Custom gradient text class with your colors
+  const gradientTextClass = "text-4xl font-extrabold mb-3 bg-gradient-to-r from-[#8b39ea] via-[#137fc8] to-[#1d4ed8] bg-clip-text text-transparent select-none";
+  const subHeadingClass = "text-lg font-medium bg-gradient-to-r from-[#137fc8] via-[#8b39ea] to-[#1d4ed8] bg-clip-text text-transparent mb-4 px-1";
 
   // Count results by details for summary
   const detailCounts = results.reduce((acc, result) => {
@@ -379,6 +426,7 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
       "verification_failed": "Verification Failed",
       "api_error": "API Error",
       "limited": "Rate Limited",
+      "chunk_verification_failed": "Partial Failure",
     };
     
     return displayMap[detail] || detail.split('_').map(word => 
@@ -394,7 +442,7 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
     if (["reject", "invalid", "spam_block", "spam", "disposable", "high_risk", "invalid_format"].includes(detail)) {
       return { bg: "text-red-600", text: "text-red-700", border: "border-red-200" };
     }
-    if (["timeout", "network_error", "service_error", "mx_error", "no_mx", "smtp_error", "verification_failed", "api_error"].includes(detail)) {
+    if (["timeout", "network_error", "service_error", "mx_error", "no_mx", "smtp_error", "verification_failed", "api_error", "chunk_verification_failed"].includes(detail)) {
       return { bg: "text-orange-600", text: "text-orange-700", border: "border-orange-200" };
     }
     return { bg: "text-yellow-600", text: "text-yellow-700", border: "border-yellow-200" };
@@ -402,50 +450,64 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto p-4">
-      {/* Header */}
+      {/* Header with enhanced styling */}
       <div className="text-left">
         <div className="flex items-center gap-3 mb-3">
-          <ShieldCheck className="w-12 h-12 text-purple-600" />
-          <h2 className={gradientTextClass}>Ninja Email Verifier</h2>
+          <div className="relative">
+            <div className="absolute -inset-1 bg-gradient-to-r from-[#8b39ea] to-[#137fc8] rounded-lg blur opacity-10"></div>
+            <ShieldCheck className="w-12 h-12 text-[#8b39ea] relative z-10" />
+          </div>
+          <div>
+            <h2 className={gradientTextClass}>Professional Email Verifier</h2>
+            <p className={subHeadingClass}>
+              Advanced SMTP Validation • Chunked Processing • 50,000 emails limit
+            </p>
+          </div>
         </div>
-        <p className={subHeadingClass}>
-          Connected to Ninja Verifier API • Real SMTP validation • 50,000 emails limit
-        </p>
       </div>
 
-      {/* Progress Bar */}
+      {/* Progress Bar with enhanced styling */}
       {loading && (
-        <div className="bg-white p-4 rounded-lg shadow border">
+        <div className="bg-white p-4 rounded-lg shadow-lg border border-[#8b39ea]/20">
           <div className="flex items-center justify-between mb-2">
-            <span className="font-semibold text-blue-700">
+            <span className="font-semibold text-[#137fc8]">
               Verifying {processedCount} of {totalEmails} emails...
             </span>
-            <span className="text-sm text-gray-600">{Math.round(progress)}%</span>
+            <span className="text-sm text-[#1d4ed8] font-bold">{Math.round(progress)}%</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-3">
+          <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
             <div
-              className="bg-gradient-to-r from-blue-500 to-green-500 h-3 rounded-full transition-all duration-300"
-              style={{ width: `${progress}%` }}
+              className="h-3 rounded-full transition-all duration-500 ease-out"
+              style={{
+                background: `linear-gradient(90deg, ${COLORS.purple}, ${COLORS.lightBlue}, ${COLORS.darkBlue})`,
+                width: `${progress}%`
+              }}
             ></div>
           </div>
           <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>Ninja Verifier API</span>
-            <span>SMTP + MX + Syntax Checks</span>
+            <span>⚡ Chunked Processing</span>
+            <span>25 emails per batch</span>
           </div>
         </div>
       )}
 
       {/* Results Summary */}
       {results.length > 0 && !loading && (
-        <div className="bg-white p-6 rounded-lg shadow-lg border">
-          <h3 className="text-xl font-bold text-gray-800 mb-4">Verification Summary</h3>
+        <div className="bg-white p-6 rounded-lg shadow-xl border border-[#8b39ea]/10">
+          <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <BarChart3 className="w-6 h-6 text-[#8b39ea]" />
+            Verification Summary
+          </h3>
           <div className="grid grid-cols-3 gap-6 mb-4">
             {topDetails.map(([detail, count], index) => {
               const DetailIcon = detailIcons[detail] || AlertTriangle;
               const colors = getStatusColor(detail);
 
               return (
-                <div key={detail} className={`text-center p-4 rounded-lg border-2 ${colors.border}`}>
+                <div 
+                  key={detail} 
+                  className={`text-center p-4 rounded-lg border-2 ${colors.border} transition-all duration-300 hover:scale-105 hover:shadow-lg`}
+                >
                   <div className={`text-4xl font-bold ${colors.bg}`}>
                     {count}
                   </div>
@@ -469,17 +531,19 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
       )}
 
       {/* Main Verification Card */}
-      <Card className="shadow-xl border-gray-200 hover:shadow-2xl transition-shadow duration-300">
-        <CardHeader className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-t-lg">
+      <Card className="shadow-2xl border border-[#8b39ea]/20 hover:shadow-3xl transition-all duration-500">
+        <CardHeader className="bg-gradient-to-r from-[#8b39ea]/10 via-[#137fc8]/10 to-[#1d4ed8]/10 rounded-t-lg border-b border-[#8b39ea]/20">
           <CardTitle className="flex items-center gap-3">
-            <Zap className="w-8 h-8 text-purple-600" />
-            <span className="bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent text-2xl">
-              Professional Email Verification
+            <div className="relative">
+              <Sparkles className="w-8 h-8 text-[#8b39ea]" />
+            </div>
+            <span className="bg-gradient-to-r from-[#8b39ea] via-[#137fc8] to-[#1d4ed8] bg-clip-text text-transparent text-2xl font-bold">
+              Advanced Email Verification
             </span>
           </CardTitle>
           <CardDescription className="text-lg">
-            <span className="bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-600 bg-clip-text text-transparent font-semibold">
-              Powered by Ninja Verifier • Multi-layer validation • Detailed analytics
+            <span className="bg-gradient-to-r from-[#137fc8] via-[#8b39ea] to-[#1d4ed8] bg-clip-text text-transparent font-semibold">
+              Enterprise-Grade Validation • Chunked Processing • Detailed Analytics
             </span>
           </CardDescription>
         </CardHeader>
@@ -487,7 +551,7 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email Input */}
             <div className="space-y-3">
-              <Label htmlFor="emails" className="text-base font-semibold">
+              <Label htmlFor="emails" className="text-base font-semibold text-[#1d4ed8]">
                 Email Addresses (one per line, max 50,000)
               </Label>
               <Textarea
@@ -497,10 +561,10 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
                 onChange={(e) => setEmails(e.target.value)}
                 disabled={loading}
                 rows={8}
-                className="font-mono text-sm border-2 border-gray-300 rounded-lg p-4 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                className="font-mono text-sm border-2 border-[#137fc8]/30 rounded-lg p-4 focus:ring-2 focus:ring-[#8b39ea] focus:border-[#8b39ea] resize-none transition-all duration-300 hover:border-[#8b39ea]/50"
               />
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">
+                <span className="text-[#137fc8] font-medium">
                   {totalEmails} emails ready for verification (Max: 50,000)
                 </span>
                 <span className="font-semibold">
@@ -511,9 +575,9 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
               </div>
             </div>
 
-            {/* File Upload */}
+            {/* File Upload - FIXED STRING */}
             <div className="space-y-3">
-              <Label htmlFor="fileInput" className="text-base font-semibold">
+              <Label htmlFor="fileInput" className="text-base font-semibold text-[#1d4ed8]">
                 Or upload a CSV/TXT file with emails
               </Label>
               <input
@@ -522,19 +586,13 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
                 accept=".csv,.txt,text/csv,text/plain"
                 onChange={handleFileUpload}
                 disabled={loading}
-                className="block w-full text-sm text-gray-500
-                file:mr-4 file:py-3 file:px-6
-                file:rounded-full file:border-0
-                file:text-sm file:font-semibold
-                file:bg-gradient-to-r file:from-blue-500 file:to-purple-600
-                file:text-white
-                hover:file:bg-gradient-to-r hover:file:from-blue-600 hover:file:to-purple-700"
+                className="block w-full text-sm text-gray-500 transition-all duration-300 file:mr-4 file:py-3 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gradient-to-r file:from-[#8b39ea] file:to-[#137fc8] file:text-white file:transition-all file:duration-300 hover:file:bg-gradient-to-r hover:file:from-[#8b39ea] hover:file:to-[#1d4ed8] hover:file:scale-105"
               />
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="mt-2"
+                className="mt-2 border-[#8b39ea] text-[#8b39ea] hover:bg-[#8b39ea] hover:text-white transition-all duration-300"
                 onClick={() => {
                   setFileEmails([]);
                   setEmails("");
@@ -551,7 +609,9 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
             <Button
               type="submit"
               disabled={loading || totalEmails === 0}
-              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold shadow-2xl transition-all duration-200 text-lg py-6 h-auto"
+              className="w-full bg-gradient-to-r from-[#8b39ea] via-[#137fc8] to-[#1d4ed8] hover:from-[#8b39ea] hover:via-[#1d4ed8] hover:to-[#137fc8] text-white font-bold shadow-2xl transition-all duration-500 text-lg py-6 h-auto transform hover:scale-105"
+              onMouseEnter={() => setIsHovered(true)}
+              onMouseLeave={() => setIsHovered(false)}
             >
               {loading ? (
                 <>
@@ -561,17 +621,17 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
                       Processing {processedCount}/{totalEmails} emails...
                     </div>
                     <div className="text-sm font-normal opacity-90">
-                      Connected to Ninja Verifier API
+                      Chunked processing (25 per batch)
                     </div>
                   </div>
                 </>
               ) : (
                 <>
-                  <ShieldCheck className="mr-3 h-6 w-6" />
+                  <Rocket className={`mr-3 h-6 w-6 transition-transform duration-300 ${isHovered ? 'animate-bounce' : ''}`} />
                   <div className="text-left">
                     <div className="font-semibold">Start Email Verification</div>
                     <div className="text-sm font-normal opacity-90">
-                      Verify up to 50,000 emails with Ninja Verifier
+                      Verify up to 50,000 emails with advanced processing
                     </div>
                   </div>
                 </>
@@ -583,15 +643,16 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
           {results.length > 0 && (
             <div className="mt-8 space-y-4">
               <div className="flex justify-between items-center">
-                <h3 className="font-bold text-xl text-gray-800">
+                <h3 className="font-bold text-xl text-gray-800 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-[#8b39ea]" />
                   Detailed Verification Results
                 </h3>
-                <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
+                <div className="text-sm text-[#137fc8] bg-[#137fc8]/10 px-3 py-1 rounded-full font-medium">
                   {results.length} emails processed
                 </div>
               </div>
-              <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
-                {results.slice(-50).map(({ email, status, details }) => {
+              <div className="max-h-96 overflow-y-auto border border-[#8b39ea]/20 rounded-lg p-4 space-y-3 bg-gradient-to-br from-white to-[#8b39ea]/5">
+                {results.slice(-50).map(({ email, status, details }, index) => {
                   const { bg, color, badge } = statusPresets[status];
                   const DetailIcon = detailIcons[details] || AlertTriangle;
                   const displayText = getStatusDisplay(details);
@@ -599,7 +660,7 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
                   return (
                     <div
                       key={email}
-                      className={`flex items-center justify-between p-4 rounded-xl transition-all duration-200 ${bg} border-2 shadow-sm hover:shadow-md`}
+                      className={`flex items-center justify-between p-4 rounded-xl transition-all duration-300 ${bg} border-2 border-[#8b39ea]/10 shadow-sm hover:shadow-lg hover:scale-105`}
                     >
                       <div className="flex items-center gap-4 min-w-0 flex-1">
                         <DetailIcon className={`w-5 h-5 flex-shrink-0 ${color}`} />
@@ -613,7 +674,7 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
                         </div>
                       </div>
                       <div
-                        className={`text-xs font-bold px-3 py-2 rounded-full ${badge} ${color} flex-shrink-0 ml-3 border-2 font-mono`}
+                        className={`text-xs font-bold px-3 py-2 rounded-full ${badge} ${color} flex-shrink-0 ml-3 border-2 font-mono transition-all duration-300 hover:scale-110`}
                       >
                         {status.toUpperCase()}
                       </div>
@@ -621,7 +682,7 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
                   );
                 })}
                 {results.length > 50 && (
-                  <div className="text-center text-sm text-gray-500 py-3 bg-white rounded-lg border">
+                  <div className="text-center text-sm text-[#137fc8] py-3 bg-white rounded-lg border border-[#8b39ea]/20">
                     Showing last 50 of {results.length} results
                   </div>
                 )}
@@ -632,7 +693,7 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
           {/* Download Button */}
           {csvBlobUrl && !loading && (
             <Button
-              className="mt-6 w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold shadow-2xl transition-all duration-200 py-6 text-lg"
+              className="mt-6 w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold shadow-2xl transition-all duration-300 py-6 text-lg transform hover:scale-105"
               onClick={handleSaveClick}
             >
               <Download className="mr-3 h-6 w-6" />
