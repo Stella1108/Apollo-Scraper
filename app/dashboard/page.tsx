@@ -9,7 +9,7 @@ import { ApolloScraperTab } from "@/components/dashboard/tabs/ApolloScraperTab";
 import { EmailVerifierTab } from "@/components/dashboard/tabs/EmailVerifierTab";
 import { CustomListTab } from "@/components/dashboard/tabs/CustomListTab";
 import { BillingTab } from "@/components/dashboard/tabs/BillingTab";
-import { WebScrapingTab } from "@/components/dashboard/tabs/WebScrapingTab";
+import  WebScrapingTab  from "@/components/dashboard/tabs/WebScrapingTab";
 import { ComingSoonTab } from "@/components/dashboard/tabs/ComingSoonTab";
 import { Loader as Loader2 } from "lucide-react";
 
