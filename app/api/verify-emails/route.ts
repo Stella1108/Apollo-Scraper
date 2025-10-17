@@ -21,7 +21,7 @@ interface NinjaVerifierResponse {
   error?: string;
 }
 
-// ✅ Cache token for 24 hours
+// Cache token for 24 hours
 let cachedToken: { token: string; expiry: number } | null = null;
 
 async function getToken(): Promise<string> {
@@ -60,9 +60,9 @@ async function getToken(): Promise<string> {
   }
 }
 
-// ✅ High-performance batch processing
+// High-performance batch processing
 async function processEmailsConcurrently(emails: string[], token: string): Promise<VerificationResult[]> {
-  const CONCURRENT_REQUESTS = 15; // Process 15 emails simultaneously
+  const CONCURRENT_REQUESTS = 10; // Reduced for better stability
   const results: VerificationResult[] = [];
   
   // Process in concurrent groups
@@ -79,9 +79,10 @@ async function processEmailsConcurrently(emails: string[], token: string): Promi
       
       // Small delay between batches to respect rate limits
       if (i + CONCURRENT_REQUESTS < emails.length) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     } catch (error) {
+      console.error(`Batch ${i} failed:`, error);
       // If batch fails, add failed results and continue
       const failedResults = batch.map(email => createFailedResult(email));
       results.push(...failedResults);
@@ -91,7 +92,7 @@ async function processEmailsConcurrently(emails: string[], token: string): Promi
   return results;
 }
 
-// ✅ Robust email verification with retry logic
+// Robust email verification with retry logic
 async function verifySingleEmailWithRetry(
   email: string, 
   token: string, 
@@ -108,7 +109,7 @@ async function verifySingleEmailWithRetry(
       const url = `${VERIFY_URL_BASE}?email=${encodeURIComponent(email)}&token=${token}`;
       
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
       const response = await fetch(url, {
         signal: controller.signal,
@@ -147,7 +148,7 @@ async function verifySingleEmailWithRetry(
   return createResult(email, firstName, "md", "max_retries_exceeded");
 }
 
-// ✅ Map Ninja Verifier API response to our format
+// Map Ninja Verifier API response to our format
 function mapNinjaResponseToResult(
   email: string, 
   firstName: string, 
@@ -259,11 +260,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Limit for performance
-    if (validEmails.length > 500) {
+    if (validEmails.length > 100) {
       return new Response(JSON.stringify({ 
         success: false,
-        message: "Maximum 500 emails allowed per request",
-        maxAllowed: 500 
+        message: "Maximum 100 emails allowed per request",
+        maxAllowed: 100 
       }), {
         status: 400,
         headers: { "Content-Type": "application/json" },

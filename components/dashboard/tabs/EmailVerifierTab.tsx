@@ -135,21 +135,15 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
 
   // Get the correct API URL based on environment
   const getApiUrl = () => {
-    // For production (Netlify) - use your backend URL directly
     if (typeof window !== 'undefined') {
-      // If we're in the browser, check if we're on localhost
       const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      
       if (isLocalhost) {
-        // For local development - use relative path (Next.js API route)
-        return "/api/verify-emails";
+        return "/api/verify-emails"; // Local development
       } else {
-        // For production - use your backend URL directly
-        return "https://work-scrapper.onrender.com/api/verify-emails";
+        return "https://work-scrapper.onrender.com/api/verify-emails"; // Production
       }
     }
-    // Default fallback
-    return "/api/verify-emails";
+    return "https://work-scrapper.onrender.com/api/verify-emails"; // Default
   };
 
   const extractFirstNameFromEmail = (email: string): string =>
@@ -210,8 +204,12 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
     try {
       console.log("🔄 Starting chunked verification for", emails.length, "emails");
       
+      // Get API URL
+      const apiUrl = getApiUrl();
+      console.log("🌐 Using API URL:", apiUrl);
+      
       // Process in smaller chunks
-      const CHUNK_SIZE = 10; // Reduced chunk size for better reliability
+      const CHUNK_SIZE = 10; // Reduced for better reliability
       const chunks = [];
       
       for (let i = 0; i < emails.length; i += CHUNK_SIZE) {
@@ -219,39 +217,38 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
       }
 
       const allResults: VerificationResult[] = [];
-      const apiUrl = getApiUrl();
       
-      console.log("🌐 Using API URL:", apiUrl);
-
       for (let i = 0; i < chunks.length; i++) {
         console.log(`📦 Processing chunk ${i + 1}/${chunks.length}`);
         
         try {
+          // Add timeout and better error handling
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
           const response = await fetch(apiUrl, {
             method: "POST",
             headers: { 
               "Content-Type": "application/json",
             },
             body: JSON.stringify(chunks[i]),
+            signal: controller.signal
           });
+
+          clearTimeout(timeoutId);
 
           if (!response.ok) {
             const errorText = await response.text();
             console.error(`❌ Chunk ${i + 1} failed:`, response.status, errorText);
-            
-            // Add fallback results for failed chunk
-            const chunkResults = chunks[i].map((email) => ({
-              email,
-              status: "md" as const,
-              details: "chunk_verification_failed",
-            }));
-            allResults.push(...chunkResults);
-            
-            toast.error(`Chunk ${i + 1} failed, using fallback data`);
-            continue;
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
           }
 
           const csvData = await response.text();
+          
+          if (!csvData || csvData.trim().length === 0) {
+            throw new Error("Empty response from server");
+          }
+
           const chunkResults = parseCSVToResults(csvData);
           allResults.push(...chunkResults);
           
@@ -266,15 +263,21 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
         } catch (chunkError) {
           console.error(`❌ Chunk ${i + 1} error:`, chunkError);
           
-          // Add fallback results for failed chunk
+          // Add fallback results for failed chunk with more specific details
+          const errorType = chunkError instanceof Error && chunkError.name === 'AbortError' ? "timeout" : "api_error";
           const chunkResults = chunks[i].map((email) => ({
             email,
             status: "md" as const,
-            details: "network_error",
+            details: errorType,
           }));
           allResults.push(...chunkResults);
           
-          toast.error(`Chunk ${i + 1} network error, using fallback data`);
+          // Show more specific error toast
+          const errorMessage = errorType === "timeout" 
+            ? `Chunk ${i + 1} timed out (30s)` 
+            : `Chunk ${i + 1} API error`;
+          
+          toast.error(errorMessage);
         }
       }
 
@@ -298,7 +301,7 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
     const totalEmails = emailsToVerify.length;
     
     try {
-      console.log("🚀 Starting bulk verification...");
+      console.log("🚀 Starting chunked bulk verification...");
       const allResults = await verifyAllEmailsAtOnce(emailsToVerify);
       
       setProgress(100);
@@ -493,7 +496,7 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
         <div className="flex items-center gap-3 mb-3">
           <div className="relative">
             <div className="absolute -inset-1 bg-gradient-to-r from-[#8b39ea] to-[#137fc8] rounded-lg blur opacity-1"></div>
-        
+     
           </div>
           <div>
             <h2 className={gradientTextClass}>Professional Email Verifier</h2>
