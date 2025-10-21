@@ -52,7 +52,6 @@ export default function WebScrapingTab({ user }: WebScrapingTabProps) {
   const [extractPeople, setExtractPeople] = useState(true);
   const [extractSocial, setExtractSocial] = useState(true);
   const [extractFacebook, setExtractFacebook] = useState(true);
-  const [useDirectConnection, setUseDirectConnection] = useState(true);
   const [maxRetries, setMaxRetries] = useState(3);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -136,7 +135,6 @@ export default function WebScrapingTab({ user }: WebScrapingTabProps) {
     formData.append("extractPeople", extractPeople.toString());
     formData.append("extractSocial", extractSocial.toString());
     formData.append("extractFacebook", extractFacebook.toString());
-    formData.append("useDirectConnection", useDirectConnection.toString());
     formData.append("maxRetries", maxRetries.toString());
 
     try {
@@ -207,141 +205,6 @@ export default function WebScrapingTab({ user }: WebScrapingTabProps) {
     } catch (error) {
       showNotification("Health check failed: Backend not reachable", "warning");
     }
-  };
-
-  const getScrapingStats = async () => {
-    if (!selectedFile) {
-      showNotification("Please select a file first", "error");
-      return;
-    }
-
-    try {
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-      
-      const response = await fetch('https://work-scrapper.onrender.com/api/urls/stats', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (response.ok) {
-        const statsData = await response.json();
-        showNotification("Stats retrieved successfully!", "success");
-        console.log("Scraping stats:", statsData);
-      } else {
-        throw new Error("Failed to get stats");
-      }
-    } catch (error) {
-      showNotification("Failed to get scraping stats", "error");
-    }
-  };
-
-  const startScrapingWithStats = async () => {
-    if (!selectedFile) {
-      showNotification("Please select a URLs file first", "error");
-      return;
-    }
-
-    setIsScraping(true);
-    updateProgress(10, "Uploading file...");
-
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-    formData.append("format", exportFormat);
-    formData.append("extractPeople", extractPeople.toString());
-    formData.append("extractSocial", extractSocial.toString());
-    formData.append("extractFacebook", extractFacebook.toString());
-    formData.append("useDirectConnection", useDirectConnection.toString());
-    formData.append("maxRetries", maxRetries.toString());
-
-    try {
-      const progressInterval = setInterval(() => {
-        setProgress(prev => {
-          if (prev < 90) {
-            const progressTexts = [
-              "Analyzing URLs...",
-              "Scraping websites...",
-              "Extracting contacts...",
-              "Processing data..."
-            ];
-            const randomText = progressTexts[Math.floor(Math.random() * progressTexts.length)];
-            setProgressText(randomText);
-            return prev + 20;
-          }
-          return prev;
-        });
-      }, 1500);
-
-      // Using Advanced Stats endpoint for JSON response
-      const response = await fetch('https://work-scrapper.onrender.com/api/urls/upload/advanced/stats', {
-        method: 'POST',
-        body: formData,
-      });
-
-      clearInterval(progressInterval);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server error: ${response.status} - ${errorText}`);
-      }
-
-      updateProgress(100, "Finalizing results...");
-
-      // Get JSON stats
-      const statsData = await response.json();
-      console.log("Advanced stats:", statsData);
-      
-      // Process the stats data for display
-      if (statsData) {
-        // Convert the API response to our display format
-        const displayResults: ScrapingResult[] = statsData.results?.map((result: any) => ({
-          url: result.url || "Unknown URL",
-          status: result.status || "UNKNOWN",
-          contacts: result.contactsCount || 0,
-          people: result.peopleCount || 0
-        })) || [];
-
-        setResults(displayResults);
-
-        setStats({
-          totalUrls: statsData.totalUrls || 0,
-          successful: statsData.successfulUrls || 0,
-          totalContacts: statsData.totalContacts || 0,
-          totalPeople: statsData.totalPeople || 0
-        });
-
-        // Create CSV from stats data for download
-        const csvContent = createCsvFromStats(statsData);
-        setCsvData(new Blob([csvContent], { type: "text/csv" }));
-      }
-
-      showNotification("Scraping with stats completed successfully!", "success");
-
-    } catch (error) {
-      console.error("Scraping with stats failed:", error);
-      showNotification("Scraping failed: " + (error as Error).message, "error");
-      
-      if ((error as Error).message.includes("Failed to fetch")) {
-        showNotification("Using demo mode - backend not reachable", "warning");
-        simulateResults();
-      }
-    } finally {
-      setIsScraping(false);
-    }
-  };
-
-  const createCsvFromStats = (statsData: any): string => {
-    // Create CSV header
-    let csvContent = "URL,Status,Contacts,People,Notes\n";
-    
-    // Add rows from results
-    if (statsData.results && Array.isArray(statsData.results)) {
-      statsData.results.forEach((result: any) => {
-        csvContent += `${result.url || "Unknown"},${result.status || "UNKNOWN"},${result.contactsCount || 0},${result.peopleCount || 0},Processed\n`;
-      });
-    }
-    
-    return csvContent;
   };
 
   const downloadCsv = () => {
@@ -430,10 +293,6 @@ export default function WebScrapingTab({ user }: WebScrapingTabProps) {
       ).join("\n");
     
     setCsvData(new Blob([csvContent], { type: "text/csv" }));
-  };
-
-  const goToWebsite = () => {
-    window.open("https://work-scrapper.onrender.com", "_blank");
   };
 
   return (
@@ -549,15 +408,6 @@ export default function WebScrapingTab({ user }: WebScrapingTabProps) {
                     />
                     <span>Facebook Profiles</span>
                   </label>
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={useDirectConnection}
-                      onChange={(e) => setUseDirectConnection(e.target.checked)}
-                      className="w-4 h-4 text-[#8b39ea] focus:ring-[#8b39ea]"
-                    />
-                    <span>Direct Connection</span>
-                  </label>
                 </div>
               </div>
 
@@ -578,52 +428,32 @@ export default function WebScrapingTab({ user }: WebScrapingTabProps) {
 
               {/* Action Buttons */}
               <div className="flex gap-4 flex-col">
-                <div className="flex gap-2">
-                  <Button
-                    onClick={startScraping}
-                    disabled={isScraping || !selectedFile}
-                    className="flex-1 bg-gradient-to-r from-[#8b39ea] to-[#137fc8] hover:from-[#8b39ea] hover:to-[#1d4ed8]"
-                  >
-                    {isScraping ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                        Scraping...
-                      </>
-                    ) : (
-                      <>
-                        <Play className="w-4 h-4 mr-2" />
-                        Start Scraping (CSV)
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    onClick={startScrapingWithStats}
-                    disabled={isScraping || !selectedFile}
-                    className="flex-1 bg-gradient-to-r from-[#137fc8] to-[#1d4ed8] hover:from-[#137fc8] hover:to-[#8b39ea]"
-                  >
-                    <BarChart3 className="w-4 h-4 mr-2" />
-                    Start with Stats (JSON)
-                  </Button>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={getHealthStats}
-                    variant="outline"
-                    className="flex-1"
-                  >
-                    <ShieldCheck className="w-4 h-4 mr-2" />
-                    Health Check
-                  </Button>
-                  <Button
-                    onClick={getScrapingStats}
-                    variant="outline"
-                    className="flex-1"
-                    disabled={!selectedFile}
-                  >
-                    <BarChart3 className="w-4 h-4 mr-2" />
-                    Get Stats
-                  </Button>
-                </div>
+                <Button
+                  onClick={startScraping}
+                  disabled={isScraping || !selectedFile}
+                  className="flex-1 bg-gradient-to-r from-[#8b39ea] to-[#137fc8] hover:from-[#8b39ea] hover:to-[#1d4ed8]"
+                >
+                  {isScraping ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                      Scraping...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4 mr-2" />
+                      Start Scraping
+                    </>
+                  )}
+                </Button>
+                
+                <Button
+                  onClick={getHealthStats}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <ShieldCheck className="w-4 h-4 mr-2" />
+                  Health Check
+                </Button>
               </div>
 
               {/* Progress Bar */}
