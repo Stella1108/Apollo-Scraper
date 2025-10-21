@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Sparkles,
   Orbit,
+  Home,
 } from "lucide-react";
 
 export interface SidebarTab {
@@ -46,6 +47,7 @@ interface SidebarProps {
   onTabChange: (tabId: string) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  onShowLanding?: () => void;
 }
 
 function TooltipPortal({
@@ -101,6 +103,7 @@ export function Sidebar({
   onTabChange,
   collapsed,
   onToggleCollapse,
+  onShowLanding,
 }: SidebarProps) {
   const [hoveredTab, setHoveredTab] = React.useState<string | null>(null);
   const buttonRefs = React.useRef<{ [key: string]: HTMLButtonElement | null }>({});
@@ -121,7 +124,7 @@ export function Sidebar({
           <div className="flex items-center gap-3 select-none whitespace-nowrap overflow-hidden">
             {/* Enhanced Icon Container */}
             <div className="relative flex-shrink-0">
-              <div className="relative p-2 bg-gradient-to-br from-purple-600 via-blue-600 to-cyan-500 rounded-xl shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105">
+              <div className="relative p-2 bg-gradient-to-br from-[#8b39ea] via-[#137fc8] to-[#1d4ed8] rounded-xl shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105">
                 <Orbit className="w-6 h-6 text-white" />
                 {/* Animated orbiting dot */}
                 <div className="absolute -top-1 -right-1">
@@ -139,7 +142,7 @@ export function Sidebar({
               "flex flex-col transition-all duration-300 overflow-hidden",
               collapsed ? "opacity-0 max-w-0" : "opacity-100 max-w-full"
             )}>
-              <span className="text-2xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent leading-tight">
+              <span className="text-2xl font-bold bg-gradient-to-r from-[#8b39ea] to-[#1d4ed8] bg-clip-text text-transparent leading-tight">
                 Globo Polo
               </span>
               <span className="text-xs text-slate-500 font-medium bg-gradient-to-r from-slate-600 to-slate-500 bg-clip-text text-transparent">
@@ -167,6 +170,44 @@ export function Sidebar({
           className="flex-1 overflow-y-auto overflow-visible py-4 relative"
           style={{ WebkitOverflowScrolling: "touch" }}
         >
+          {/* Home Button - Added at the top of navigation */}
+          {onShowLanding && (
+            <div className="mb-2 px-3">
+              <button
+                ref={(el) => (buttonRefs.current["home"] = el)}
+                onClick={onShowLanding}
+                onMouseEnter={() => setHoveredTab("home")}
+                onMouseLeave={() => setHoveredTab(null)}
+                className={cn(
+                  "group relative flex w-full select-none items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-left transition-all duration-200 outline-none",
+                  "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700 hover:from-purple-100 hover:to-pink-100 border border-purple-100 hover:shadow-md"
+                )}
+              >
+                <div className={cn(
+                  "p-1.5 rounded-lg transition-all duration-200",
+                  "bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm group-hover:scale-105"
+                )}>
+                  <Home className="w-4 h-4 flex-shrink-0" />
+                </div>
+                
+                {!collapsed && (
+                  <span className="font-medium transition-all duration-200">
+                    Home Page
+                  </span>
+                )}
+
+                {collapsed && hoveredTab === "home" && buttonRefs.current["home"] && (
+                  <TooltipPortal anchorRef={{ current: buttonRefs.current["home"] }}>
+                    Home Page
+                  </TooltipPortal>
+                )}
+
+                {/* Home indicator dot */}
+                <div className="absolute right-3 w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
+              </button>
+            </div>
+          )}
+
           <div className="space-y-1 px-3">
             {tabs.map((tab) => {
               const Icon = tab.icon;

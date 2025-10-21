@@ -11,14 +11,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { LogOut, User } from "lucide-react";
+import { LogOut, User, Home } from "lucide-react";
 
 interface HeaderProps {
   collapsed: boolean;
+  onShowLanding?: () => void;
+  user: any;
 }
 
-export function Header({ collapsed }: HeaderProps) {
-  const { user, signOut } = useAuth();
+export function Header({ collapsed, onShowLanding, user }: HeaderProps) {
+  const { signOut } = useAuth();
 
   const getInitials = () => {
     if (user?.user_metadata?.name) {
@@ -34,9 +36,21 @@ export function Header({ collapsed }: HeaderProps) {
 
   return (
     <header className="h-16 border-b border-slate-100 bg-white flex items-center justify-between px-6 w-full">
-      <h1 className="text-2xl font-bold select-none bg-gradient-to-r from-blue-500 via-purple-600 to-indigo-700 bg-clip-text text-transparent text-center">
-        Dashboard
-      </h1>
+      <div className="flex items-center gap-4">
+        {onShowLanding && (
+          <Button
+            variant="ghost"
+            onClick={onShowLanding}
+            className="flex items-center gap-2 text-gray-600 hover:text-[#8b39ea] transition-colors duration-300 hover:bg-purple-50"
+          >
+            <Home className="w-4 h-4" />
+            <span className="hidden sm:inline">Back to Home</span>
+          </Button>
+        )}
+        <h1 className="text-2xl font-bold select-none bg-gradient-to-r from-[#8b39ea] to-[#137fc8] bg-clip-text text-transparent">
+          Dashboard
+        </h1>
+      </div>
 
       <div className="flex items-center gap-4">
         <DropdownMenu>
@@ -47,7 +61,7 @@ export function Header({ collapsed }: HeaderProps) {
               aria-label="User menu"
             >
               <Avatar className="h-10 w-10 border-2 border-blue-100">
-                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-cyan-500 text-white font-semibold">
+                <AvatarFallback className="bg-gradient-to-br from-[#8b39ea] to-[#137fc8] text-white font-semibold">
                   {getInitials()}
                 </AvatarFallback>
               </Avatar>

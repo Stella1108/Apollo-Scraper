@@ -9,7 +9,7 @@ import { ApolloScraperTab } from "@/components/dashboard/tabs/ApolloScraperTab";
 import { EmailVerifierTab } from "@/components/dashboard/tabs/EmailVerifierTab";
 import { CustomListTab } from "@/components/dashboard/tabs/CustomListTab";
 import { BillingTab } from "@/components/dashboard/tabs/BillingTab";
-import  WebScrapingTab  from "@/components/dashboard/tabs/WebScrapingTab";
+import WebScrapingTab from "@/components/dashboard/tabs/WebScrapingTab";
 import { ComingSoonTab } from "@/components/dashboard/tabs/ComingSoonTab";
 import { Loader as Loader2 } from "lucide-react";
 
@@ -28,6 +28,10 @@ export default function DashboardPage() {
 
   const handleToggleCollapse = () => {
     setCollapsed(!collapsed);
+  };
+
+  const handleShowLanding = () => {
+    router.push("/");
   };
 
   if (loading) {
@@ -115,12 +119,13 @@ export default function DashboardPage() {
           onTabChange={setActiveTab}
           collapsed={collapsed}
           onToggleCollapse={handleToggleCollapse}
+          onShowLanding={handleShowLanding}
         />
       </div>
 
       {/* Main content */}
       <div className="flex flex-col min-w-0 overflow-hidden">
-        <Header collapsed={collapsed} />
+        <Header collapsed={collapsed} onShowLanding={handleShowLanding} user={user} />
         <div className="flex-1 overflow-y-auto">
           <div className="p-2">{renderTabContent()}</div>
         </div>

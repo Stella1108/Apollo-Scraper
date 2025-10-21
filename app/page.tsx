@@ -3,29 +3,63 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, Orbit, Database, Mail, Users, Rocket, TrendingUp, Zap, ArrowRight, Sparkles, CheckCircle, Globe, Search, Target, BarChart3, Shield } from 'lucide-react';
+import { Loader2, Orbit, Database, Mail, Users, Rocket, TrendingUp, Zap, ArrowRight, Sparkles, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Sidebar } from '@/components/dashboard/Sidebar';
+import { Header } from '@/components/dashboard/Header';
+import { ApolloScraperTab } from '@/components/dashboard/tabs/ApolloScraperTab';
+import { EmailVerifierTab } from '@/components/dashboard/tabs/EmailVerifierTab';
+import { CustomListTab } from '@/components/dashboard/tabs/CustomListTab';
+import { BillingTab } from '@/components/dashboard/tabs/BillingTab';
+import WebScrapingTab from '@/components/dashboard/tabs/WebScrapingTab';
+import { ComingSoonTab } from '@/components/dashboard/tabs/ComingSoonTab';
 
-export default function Home() {
-  const { user, loading } = useAuth();
+export default function HomePage() {
+  const { user, loading, signOut } = useAuth(); // Add signOut from useAuth
   const router = useRouter();
-  const [showLanding, setShowLanding] = useState(false);
+  const [showLanding, setShowLanding] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
     if (!loading) {
-      if (user) {
-        router.push('/dashboard');
-      } else {
-        setShowLanding(true);
-        // Trigger entrance animation
-        setTimeout(() => setIsVisible(true), 100);
-      }
+      // Show landing page by default for all users
+      setShowLanding(true);
+      setTimeout(() => setIsVisible(true), 100);
     }
-  }, [user, loading, router]);
+  }, [loading]);
 
-  if (loading || !showLanding) {
+  const handleGoToDashboard = () => {
+    if (user) {
+      setShowLanding(false);
+    } else {
+      router.push('/login');
+    }
+  };
+
+  const handleShowLanding = () => {
+    setShowLanding(true);
+  };
+
+  // Add handleSignOut function
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      // After sign out, redirect to login page
+      router.push('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      // Even if there's an error, redirect to login page
+      router.push('/login');
+    }
+  };
+
+  // Show dashboard when user is logged in and not showing landing page
+  if (!showLanding && user) {
+    return <DashboardContent user={user} onShowLanding={handleShowLanding} />;
+  }
+
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
         <div className="relative">
@@ -36,6 +70,7 @@ export default function Home() {
     );
   }
 
+  // Landing Page Content
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 overflow-hidden">
       {/* Animated Background Elements */}
@@ -50,16 +85,13 @@ export default function Home() {
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 select-none whitespace-nowrap overflow-hidden">
-              {/* Enhanced Icon Container */}
               <div className="relative flex-shrink-0">
                 <div className="relative p-2 bg-gradient-to-br from-[#8b39ea] via-[#137fc8] to-[#1d4ed8] rounded-xl shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105 group">
                   <Orbit className="w-6 h-6 text-white transform group-hover:rotate-180 transition-transform duration-500" />
-                  {/* Animated orbiting dot */}
                   <div className="absolute -top-1 -right-1">
                     <div className="w-2 h-2 bg-yellow-400 rounded-full animate-ping"></div>
                     <div className="w-2 h-2 bg-yellow-400 rounded-full absolute top-0 right-0 group-hover:scale-150 transition-transform duration-300"></div>
                   </div>
-                  {/* Sparkle effects */}
                   <Sparkles className="absolute -bottom-1 -left-1 w-3 h-3 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 animate-pulse" />
                 </div>
               </div>
@@ -69,20 +101,41 @@ export default function Home() {
             </div>
             
             <div className="flex items-center space-x-3">
-              <Button 
-                variant="ghost" 
-                onClick={() => router.push('/login')}
-                className="text-gray-600 hover:text-[#8b39ea] text-sm transform hover:scale-105 transition-all duration-300 hover:shadow-md"
-              >
-                Sign In
-              </Button>
-              <Button 
-                onClick={() => router.push('/signup')}
-                className="bg-gradient-to-r from-[#8b39ea] to-[#137fc8] hover:from-[#7a2dd4] hover:to-[#0f6cb0] text-white text-sm px-4 py-2 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl relative overflow-hidden group"
-              >
-                <span className="relative z-10">Get Started</span>
-                <div className="absolute inset-0 bg-gradient-to-r from-[#7a2dd4] to-[#0f6cb0] transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left"></div>
-              </Button>
+              {user ? (
+                <>
+                  <Button 
+                    variant="ghost" 
+                    onClick={handleGoToDashboard}
+                    className="text-gray-600 hover:text-[#8b39ea] text-sm transform hover:scale-105 transition-all duration-300 hover:shadow-md"
+                  >
+                    Go to Dashboard
+                  </Button>
+                  <Button 
+                    onClick={handleSignOut} // Use handleSignOut instead of router.push('/logout')
+                    variant="outline"
+                    className="text-gray-600 border-gray-300 hover:border-[#8b39ea] hover:text-[#8b39ea] text-sm transform hover:scale-105 transition-all duration-300"
+                  >
+                    Sign Out
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => router.push('/login')}
+                    className="text-gray-600 hover:text-[#8b39ea] text-sm transform hover:scale-105 transition-all duration-300 hover:shadow-md"
+                  >
+                    Sign In
+                  </Button>
+                  <Button 
+                    onClick={() => router.push('/signup')}
+                    className="bg-gradient-to-r from-[#8b39ea] to-[#137fc8] hover:from-[#7a2dd4] hover:to-[#0f6cb0] text-white text-sm px-4 py-2 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl relative overflow-hidden group"
+                  >
+                    <span className="relative z-10">Get Started</span>
+                    <div className="absolute inset-0 bg-gradient-to-r from-[#7a2dd4] to-[#0f6cb0] transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left"></div>
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -112,11 +165,12 @@ export default function Home() {
             <div className={`flex flex-col sm:flex-row gap-3 justify-center items-center pt-6 transition-all duration-1000 delay-700 ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}>
               <Button 
                 size="lg"
-                onClick={() => router.push('/signup')}
+                onClick={handleGoToDashboard}
                 className="bg-gradient-to-r from-[#8b39ea] to-[#137fc8] hover:from-[#7a2dd4] hover:to-[#0f6cb0] text-white px-6 py-4 text-base transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl relative overflow-hidden group"
               >
                 <span className="relative z-10 flex items-center">
-                  Start Free Trial <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />
+                  {user ? 'Go to Dashboard' : 'Start Free Trial'} 
+                  <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />
                 </span>
                 <div className="absolute inset-0 bg-gradient-to-r from-[#7a2dd4] to-[#0f6cb0] transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left"></div>
               </Button>
@@ -200,7 +254,6 @@ export default function Home() {
             ].map((feature, index) => (
               <Card key={index} className="group hover:shadow-xl transition-all duration-500 border-0 shadow-md hover:border-[#8b39ea]/20 border-2 border-transparent transform hover:-translate-y-2">
                 <CardContent className="p-5 relative overflow-hidden">
-                  {/* Background effect */}
                   <div className="absolute inset-0 bg-gradient-to-br from-transparent to-purple-50 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                   
                   <div className={`bg-gradient-to-r ${feature.color} p-2 rounded-lg w-fit text-white mb-3 group-hover:scale-110 transition-transform duration-300 relative z-10 transform group-hover:rotate-6`}>
@@ -213,7 +266,6 @@ export default function Home() {
                     {feature.description}
                   </p>
                   
-                  {/* Hover effect line */}
                   <div className="absolute bottom-0 left-0 w-0 h-1 bg-gradient-to-r from-[#8b39ea] to-[#137fc8] group-hover:w-full transition-all duration-500"></div>
                 </CardContent>
               </Card>
@@ -224,7 +276,6 @@ export default function Home() {
 
       {/* CTA Section */}
       <section className="py-16 bg-gradient-to-r from-[#8b39ea] to-[#1d4ed8] px-4 relative overflow-hidden">
-        {/* Animated background elements */}
         <div className="absolute inset-0">
           <div className="absolute top-0 left-0 w-20 h-20 bg-white/10 rounded-full animate-pulse"></div>
           <div className="absolute bottom-0 right-0 w-16 h-16 bg-white/10 rounded-full animate-pulse delay-1000"></div>
@@ -238,10 +289,12 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button 
               size="lg"
-              onClick={() => router.push('/signup')}
+              onClick={handleGoToDashboard}
               className="bg-white text-[#8b39ea] hover:bg-gray-100 px-6 py-4 text-base font-semibold transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl relative overflow-hidden group"
             >
-              <span className="relative z-10">Start Free Trial</span>
+              <span className="relative z-10">
+                {user ? 'Go to Dashboard' : 'Start Free Trial'}
+              </span>
               <div className="absolute inset-0 bg-gray-100 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left"></div>
             </Button>
             <Button 
@@ -263,7 +316,6 @@ export default function Home() {
               <div className="relative flex-shrink-0">
                 <div className="relative p-2 bg-gradient-to-br from-[#8b39ea] via-[#137fc8] to-[#1d4ed8] rounded-lg shadow-lg transform hover:scale-105 transition-transform duration-300">
                   <Orbit className="w-5 h-5 text-white" />
-                  {/* Animated orbiting dot */}
                   <div className="absolute -top-1 -right-1">
                     <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-ping"></div>
                     <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full absolute top-0 right-0"></div>
@@ -279,6 +331,102 @@ export default function Home() {
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+// Dashboard Content Component
+function DashboardContent({ user, onShowLanding }: { user: any; onShowLanding: () => void }) {
+  const [activeTab, setActiveTab] = useState("apollo-scraper");
+  const [collapsed, setCollapsed] = useState(false);
+
+  const handleToggleCollapse = () => {
+    setCollapsed(!collapsed);
+  };
+
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case "apollo-scraper":
+        return <ApolloScraperTab user={user} />;
+      case "email-verifier":
+        return <EmailVerifierTab user={user} />;
+      case "custom-list":
+        return <CustomListTab user={user} />;
+      case "web-scraping":
+        return <WebScrapingTab user={user} />;
+      case "billing":
+        return <BillingTab user={user} />;
+      case "email-warmup":
+        return (
+          <ComingSoonTab
+            title="Email Warm-up"
+            description="Gradually increase email sending volume to improve deliverability"
+          />
+        );
+      case "sales-navigator":
+        return (
+          <ComingSoonTab
+            title="Sales Navigator"
+            description="Integrate with LinkedIn Sales Navigator for enhanced prospecting"
+          />
+        );
+      case "lead-management":
+        return (
+          <ComingSoonTab
+            title="Lead Management"
+            description="Organize and manage your leads with our CRM-like interface"
+          />
+        );
+      case "account":
+        return (
+          <ComingSoonTab
+            title="Account Settings"
+            description="Manage your profile, preferences, and security settings"
+          />
+        );
+      case "affiliate":
+        return (
+          <ComingSoonTab
+            title="Affiliate Program"
+            description="Earn rewards by referring Apollo Scraper to others"
+          />
+        );
+      case "support":
+        return (
+          <ComingSoonTab
+            title="Support Center"
+            description="Get help with Apollo Scraper features and troubleshooting"
+          />
+        );
+      default:
+        return <ApolloScraperTab user={user} />;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 grid transition-all duration-350 ease-in-out"
+      style={{ 
+        gridTemplateColumns: collapsed ? '6rem 1fr' : '16rem 1fr'
+      }}
+    >
+      {/* Sidebar */}
+      <div className="h-full">
+        <Sidebar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          collapsed={collapsed}
+          onToggleCollapse={handleToggleCollapse}
+          onShowLanding={onShowLanding}
+        />
+      </div>
+
+      {/* Main content */}
+      <div className="flex flex-col min-w-0 overflow-hidden">
+        <Header collapsed={collapsed} onShowLanding={onShowLanding} user={user} />
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-2">{renderTabContent()}</div>
+        </div>
+      </div>
     </div>
   );
 }
