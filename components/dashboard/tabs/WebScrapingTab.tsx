@@ -89,7 +89,7 @@ export default function WebScrapingTab({ user }: WebScrapingTabProps) {
     const file = event.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      showNotification(File selected: ${file.name}, "success");
+      showNotification(`File selected: ${file.name}`, "success");
     }
   };
 
@@ -110,7 +110,7 @@ export default function WebScrapingTab({ user }: WebScrapingTabProps) {
     const files = event.dataTransfer.files;
     if (files.length && files[0].type.includes("csv") || files[0].name.endsWith('.txt') || files[0].name.endsWith('.xlsx')) {
       setSelectedFile(files[0]);
-      showNotification(File selected: ${files[0].name}, "success");
+      showNotification(`File selected: ${files[0].name}`, "success");
     } else {
       showNotification("Please select a valid file (CSV, TXT, XLSX)", "error");
     }
@@ -168,7 +168,7 @@ export default function WebScrapingTab({ user }: WebScrapingTabProps) {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(Server error: ${response.status} - ${errorText});
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
       }
 
       updateProgress(100, "Finalizing results...");
@@ -282,7 +282,7 @@ export default function WebScrapingTab({ user }: WebScrapingTabProps) {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(Server error: ${response.status} - ${errorText});
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
       }
 
       updateProgress(100, "Finalizing results...");
@@ -337,7 +337,7 @@ export default function WebScrapingTab({ user }: WebScrapingTabProps) {
     // Add rows from results
     if (statsData.results && Array.isArray(statsData.results)) {
       statsData.results.forEach((result: any) => {
-        csvContent += ${result.url || "Unknown"},${result.status || "UNKNOWN"},${result.contactsCount || 0},${result.peopleCount || 0},Processed\n;
+        csvContent += `${result.url || "Unknown"},${result.status || "UNKNOWN"},${result.contactsCount || 0},${result.peopleCount || 0},Processed\n`;
       });
     }
     
@@ -353,7 +353,7 @@ export default function WebScrapingTab({ user }: WebScrapingTabProps) {
     const url = URL.createObjectURL(csvData);
     const a = document.createElement("a");
     a.href = url;
-    a.download = company_scraper_results_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.csv;
+    a.download = `company_scraper_results_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -426,7 +426,7 @@ export default function WebScrapingTab({ user }: WebScrapingTabProps) {
     // Create a dummy CSV for download
     const csvContent = "URL,Status,Emails,Phones,LinkedIns,GitHubs,Facebooks,People,Notes\n" +
       sampleData.map(row => 
-        ${row.url},${row.status},${row.contacts},0,0,0,0,${row.people},Demo data
+        `${row.url},${row.status},${row.contacts},0,0,0,0,${row.people},Demo data`
       ).join("\n");
     
     setCsvData(new Blob([csvContent], { type: "text/csv" }));
@@ -632,7 +632,7 @@ export default function WebScrapingTab({ user }: WebScrapingTabProps) {
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div
                       className="bg-gradient-to-r from-[#8b39ea] to-[#137fc8] h-2 rounded-full transition-all duration-300"
-                      style={{ width: ${progress}% }}
+                      style={{ width: `${progress}%` }}
                     ></div>
                   </div>
                   <p className="text-sm text-[#137fc8] text-center">{progressText}</p>
