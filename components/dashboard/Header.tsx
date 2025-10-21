@@ -37,7 +37,7 @@ export function Header({ collapsed, onShowLanding, user }: HeaderProps) {
   return (
     <header className="h-16 border-b border-slate-100 bg-white flex items-center justify-between px-6 w-full">
       <div className="flex items-center gap-4">
-        {onShowLanding && (
+        {/* {onShowLanding && (
           <Button
             variant="ghost"
             onClick={onShowLanding}
@@ -46,7 +46,7 @@ export function Header({ collapsed, onShowLanding, user }: HeaderProps) {
             <Home className="w-4 h-4" />
             <span className="hidden sm:inline">Back to Home</span>
           </Button>
-        )}
+        )} */}
         <h1 className="text-2xl font-bold select-none bg-gradient-to-r from-[#8b39ea] to-[#137fc8] bg-clip-text text-transparent">
           Dashboard
         </h1>
