@@ -29,6 +29,9 @@ import {
   CheckCircle,
   XCircle,
   RefreshCcw,
+  Search,
+  FileDown,
+  Zap,
 } from "lucide-react";
 import {
   Select,
@@ -44,7 +47,6 @@ interface User {
   id: string;
   email?: string;
   name?: string;
-  // add any other user properties your app uses
 }
 
 interface ScraperRequest {
@@ -64,6 +66,15 @@ interface ApolloScraperTabProps {
   user: User;
 }
 
+// Custom color palette
+const COLORS = {
+  purple: "#8b39ea",
+  lightBlue: "#137fc8", 
+  darkBlue: "#1d4ed8",
+  gradient: "linear-gradient(135deg, #8b39ea 0%, #137fc8 50%, #1d4ed8 100%)",
+  lightGradient: "linear-gradient(135deg, #8b39ea20 0%, #137fc820 50%, #1d4ed820 100%)",
+};
+
 export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
   const [url, setUrl] = useState("");
   const [leadsCount, setLeadsCount] = useState("");
@@ -74,6 +85,7 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
   const [filterFileName, setFilterFileName] = useState("");
   const [showAll, setShowAll] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isHovered, setIsHovered] = useState(false);
   const pageSize = 10;
 
   const requestsRef = useRef(requests);
@@ -190,18 +202,24 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
   const handleRefresh = () => {
     setFilterFileName("");
     fetchRequests();
-    toast("Refreshed requests list", { duration: 2000 });
+    toast("🔄 Requests list refreshed", { 
+      duration: 2000,
+      style: {
+        background: COLORS.lightGradient,
+        border: `1px solid ${COLORS.purple}20`,
+      }
+    });
   };
 
   const getStatusBadge = (status: ScraperRequest["status"]) => {
     const variants = {
-      pending: "bg-yellow-100 text-yellow-800",
-      processing: "bg-blue-100 text-blue-800",
-      completed: "bg-green-100 text-green-800",
-      failed: "bg-red-100 text-red-800",
+      pending: `bg-yellow-100 text-yellow-800 border-yellow-300 hover:bg-yellow-200 transition-colors duration-300`,
+      processing: `bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200 transition-colors duration-300`,
+      completed: `bg-green-100 text-green-800 border-green-300 hover:bg-green-200 transition-colors duration-300`,
+      failed: `bg-red-100 text-red-800 border-red-300 hover:bg-red-200 transition-colors duration-300`,
     };
     const icons = {
-      pending: <RefreshCcw className="inline w-4 h-4 mr-1" />,
+      pending: <RefreshCcw className="inline w-4 h-4 mr-1 animate-pulse" />,
       processing: <Loader2 className="inline w-4 h-4 mr-1 animate-spin" />,
       completed: <CheckCircle className="inline w-4 h-4 mr-1" />,
       failed: <XCircle className="inline w-4 h-4 mr-1" />,
@@ -209,7 +227,7 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
 
     return (
       <Badge
-        className={`${variants[status]} flex items-center justify-center gap-1 px-3 py-1`}
+        className={`${variants[status]} flex items-center justify-center gap-1 px-3 py-1 border-2 transition-all duration-300 hover:scale-105`}
         variant="secondary"
       >
         {icons[status]}
@@ -234,27 +252,52 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
     return filtered.slice(startIdx, startIdx + pageSize);
   }, [filtered, showAll, currentPage]);
 
+  // Custom gradient text class
+  const gradientTextClass = "bg-gradient-to-r from-[#8b39ea] via-[#137fc8] to-[#1d4ed8] bg-clip-text text-transparent";
+  const subHeadingClass = "text-lg font-medium bg-gradient-to-r from-[#137fc8] via-[#8b39ea] to-[#1d4ed8] bg-clip-text text-transparent";
+
   return (
     <div className="space-y-8 max-w-8xl mx-auto p-4 w-full">
-      <h2 className="text-4xl font-bold text-blue-700 mb-4">Apollo Scraper</h2>
-      <p className="mb-6 text-gray-700">
-        Extract high-quality leads from Apollo with precision
-      </p>
+      {/* Header Section */}
+      <div className="text-left">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="relative">
+            <div className="absolute -inset-1 bg-gradient-to-r from-[#8b39ea] to-[#137fc8] rounded-lg blur opacity-25 animate-pulse"></div>
+         
+          </div>
+          <div>
+            <h2 className={`text-4xl font-extrabold mb-3 ${gradientTextClass} select-none`}>
+              Apollo Scraper
+            </h2>
+            <p className={subHeadingClass}>
+              Extract high-quality leads from Apollo with precision and speed
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* New Scraping Request Form */}
-      <Card className="shadow-md border border-gray-300 hover:shadow-lg transition-shadow duration-300 w-full">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-blue-700">
-            <Rocket className="w-6 h-6" />
-            New Scraping Request
+      <Card className="shadow-2xl border border-[#8b39ea]/20 hover:shadow-3xl transition-all duration-500 transform hover:-translate-y-1">
+        <CardHeader className="bg-gradient-to-r from-[#8b39ea]/10 via-[#137fc8]/10 to-[#1d4ed8]/10 rounded-t-lg border-b border-[#8b39ea]/20">
+          <CardTitle className="flex items-center gap-3">
+            <div className="relative">
+              <Rocket className="w-8 h-8 text-[#8b39ea]" />
+            </div>
+            <span className={gradientTextClass + " text-2xl font-bold"}>
+              New Scraping Request
+            </span>
           </CardTitle>
-          <CardDescription>Enter URL and specify leads count</CardDescription>
+          <CardDescription className="text-lg">
+            <span className={subHeadingClass + " font-semibold"}>
+              Enter Apollo URL and specify your leads requirements
+            </span>
+          </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6 bg-gradient-to-br from-white to-[#8b39ea]/5">
           <form onSubmit={handleSubmit} className="space-y-6 w-full">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 w-full">
-              <div className="space-y-1 w-full">
-                <Label htmlFor="url" className="font-semibold text-blue-700">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
+              <div className="space-y-3 w-full">
+                <Label htmlFor="url" className="text-base font-semibold text-[#1d4ed8]">
                   Apollo URL
                 </Label>
                 <Input
@@ -264,67 +307,99 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   required
+                  className="border-2 border-[#137fc8]/30 rounded-lg p-3 focus:ring-2 focus:ring-[#8b39ea] focus:border-[#8b39ea] transition-all duration-300 hover:border-[#8b39ea]/50"
                 />
               </div>
-              <div className="space-y-1 w-full">
-                <Label htmlFor="leadsCount" className="font-semibold text-blue-700">
+              <div className="space-y-3 w-full">
+                <Label htmlFor="leadsCount" className="text-base font-semibold text-[#1d4ed8]">
                   Number of Leads
                 </Label>
                 <Input
                   id="leadsCount"
                   type="number"
-                  placeholder="10"
+                  placeholder="50"
                   value={leadsCount}
                   onChange={(e) => setLeadsCount(e.target.value)}
                   required
                   min={1}
+                  className="border-2 border-[#137fc8]/30 rounded-lg p-3 focus:ring-2 focus:ring-[#8b39ea] focus:border-[#8b39ea] transition-all duration-300 hover:border-[#8b39ea]/50"
                 />
               </div>
-              <div className="space-y-1 w-full">
-                <Label htmlFor="fileName" className="font-semibold text-blue-700">
-                  File Name (Optional)
+              <div className="space-y-3 w-full">
+                <Label htmlFor="fileName" className="text-base font-semibold text-[#1d4ed8]">
+                  File Name
                 </Label>
                 <Input
                   id="fileName"
                   type="text"
-                  placeholder="my_leads.csv"
+                  placeholder="my_leads"
                   value={fileName}
                   onChange={(e) => setFileName(e.target.value)}
+                  className="border-2 border-[#137fc8]/30 rounded-lg p-3 focus:ring-2 focus:ring-[#8b39ea] focus:border-[#8b39ea] transition-all duration-300 hover:border-[#8b39ea]/50"
                 />
               </div>
-              <div className="space-y-1 w-full">
-                <Label htmlFor="fileFormat" className="font-semibold text-blue-700">
+              <div className="space-y-3 w-full">
+                <Label htmlFor="fileFormat" className="text-base font-semibold text-[#1d4ed8]">
                   Export Format
                 </Label>
                 <Select
                   value={fileFormat}
                   onValueChange={(v) => setFileFormat(v as "csv" | "xlsx")}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="border-2 border-[#137fc8]/30 rounded-lg p-3 focus:ring-2 focus:ring-[#8b39ea] focus:border-[#8b39ea] transition-all duration-300 hover:border-[#8b39ea]/50">
                     <SelectValue placeholder="Select format" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="csv">CSV</SelectItem>
-                    <SelectItem value="xlsx">Excel</SelectItem>
+                    <SelectItem value="csv" className="focus:bg-[#8b39ea]/10 focus:text-[#8b39ea]">
+                      <div className="flex items-center gap-2">
+                        <FileDown className="w-4 h-4" />
+                        CSV Format
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="xlsx" className="focus:bg-[#8b39ea]/10 focus:text-[#8b39ea]">
+                      <div className="flex items-center gap-2">
+                        <FileDown className="w-4 h-4" />
+                        Excel Format
+                      </div>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
-            <div className="mt-4">
+            <div className="flex gap-4 pt-4">
               <Button
                 type="submit"
                 disabled={loading}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-md shadow-md transition duration-300 w-auto"
-                size="sm"
+                className="bg-gradient-to-r from-[#8b39ea] via-[#137fc8] to-[#1d4ed8] hover:from-[#8b39ea] hover:via-[#1d4ed8] hover:to-[#137fc8] text-white font-bold shadow-2xl transition-all duration-500 text-lg py-6 px-8 transform hover:scale-105"
+                onMouseEnter={() => setIsHovered(true)}
+                onMouseLeave={() => setIsHovered(false)}
               >
                 {loading ? (
                   <>
-                    <Loader2 className="inline mr-2 h-5 w-5 animate-spin" />
-                    Submitting...
+                    <Loader2 className="mr-3 h-6 w-6 animate-spin" />
+                    <div className="text-left">
+                      <div className="font-semibold">Processing Request</div>
+                 
+                    </div>
                   </>
                 ) : (
-                  "Start Scraping"
+                  <>
+                    <Rocket className={`mr-3 h-6 w-6 transition-transform duration-300 ${isHovered ? 'animate-bounce' : ''}`} />
+                    <div className="text-left">
+                      <div className="font-semibold">Start Scraping</div>
+         
+                    </div>
+                  </>
                 )}
+              </Button>
+              
+              <Button
+                type="button"
+                variant="outline"
+                onClick={resetForm}
+                className="border-[#8b39ea] text-[#8b39ea] hover:bg-[#8b39ea] hover:text-white transition-all duration-300 py-6 px-6"
+              >
+                Clear Form
               </Button>
             </div>
           </form>
@@ -332,79 +407,97 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
       </Card>
 
       {/* Requests Table & Pagination */}
-      <Card className="shadow-md border border-gray-300 hover:shadow-lg transition-shadow duration-300 w-full">
-        <CardHeader>
+      <Card className="shadow-2xl border border-[#8b39ea]/20 hover:shadow-3xl transition-all duration-500">
+        <CardHeader className="bg-gradient-to-r from-[#8b39ea]/10 via-[#137fc8]/10 to-[#1d4ed8]/10 rounded-t-lg border-b border-[#8b39ea]/20">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="text-xl font-semibold text-blue-700">Recent Requests</h3>
+            <div className="flex items-center gap-3">
+              <FileDown className="w-8 h-8 text-[#8b39ea]" />
+              <h3 className={`text-2xl font-bold ${gradientTextClass}`}>
+                Scraping Requests
+              </h3>
+            </div>
             <Button
-              variant="ghost"
-              size="sm"
+              variant="outline"
+              size="lg"
               onClick={handleRefresh}
-              className="flex items-center gap-1 text-blue-600"
+              className="border-[#8b39ea] text-[#8b39ea] hover:bg-[#8b39ea] hover:text-white transition-all duration-300 transform hover:scale-105"
             >
-              <RefreshCcw className="w-5 h-5" />
+              <RefreshCcw className="w-5 h-5 mr-2" />
               Refresh
             </Button>
           </div>
-          <CardDescription>View and download your scraping results</CardDescription>
-          <div className="mt-3">
+          <CardDescription className="text-lg">
+            <span className={subHeadingClass + " font-semibold"}>
+              View and download your scraping results
+            </span>
+          </CardDescription>
+          <div className="mt-6 relative">
+      
             <Input
               type="search"
-              placeholder="Search by file name..."
+                     placeholder="Search by file name..."
               value={filterFileName}
               onChange={(e) => setFilterFileName(e.target.value)}
-              className="rounded-md"
+              className="pl-10 border-2 border-[#137fc8]/30 rounded-lg p-3 focus:ring-2 focus:ring-[#8b39ea] focus:border-[#8b39ea] transition-all duration-300 hover:border-[#8b39ea]/50"
             />
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-auto rounded-md border border-gray-300 w-full mb-4">
+        <CardContent className="pt-6 bg-gradient-to-br from-white to-[#8b39ea]/5">
+          <div className="overflow-auto rounded-xl border-2 border-[#8b39ea]/20 shadow-inner w-full mb-6">
             <Table>
               <TableHeader>
-                <TableRow className="bg-gray-50">
-                  <TableHead className="text-blue-700">Date</TableHead>
-                  <TableHead className="text-blue-700">File Name</TableHead>
-                  <TableHead className="text-blue-700">Search Link</TableHead>
-                  <TableHead className="text-blue-700">Status</TableHead>
-                  <TableHead className="text-blue-700">Requested</TableHead>
-                  <TableHead className="text-blue-700">Extracted</TableHead>
-                  <TableHead className="text-blue-700">Credits</TableHead>
-                  <TableHead className="text-blue-700 text-right">Export</TableHead>
+                <TableRow className="bg-gradient-to-r from-[#8b39ea]/10 via-[#137fc8]/10 to-[#1d4ed8]/10">
+                  <TableHead className="text-[#1d4ed8] font-bold text-lg py-4">Date</TableHead>
+                  <TableHead className="text-[#1d4ed8] font-bold text-lg py-4">File Name</TableHead>
+                  <TableHead className="text-[#1d4ed8] font-bold text-lg py-4">Search Link</TableHead>
+                  <TableHead className="text-[#1d4ed8] font-bold text-lg py-4">Status</TableHead>
+                  <TableHead className="text-[#1d4ed8] font-bold text-lg py-4">Requested</TableHead>
+                  <TableHead className="text-[#1d4ed8] font-bold text-lg py-4">Extracted</TableHead>
+                  <TableHead className="text-[#1d4ed8] font-bold text-lg py-4">Credits</TableHead>
+                  <TableHead className="text-[#1d4ed8] font-bold text-lg py-4 text-right">Export</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {displayRequests.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-gray-400 py-8">
-                      No scraping requests match your search.
+                    <TableCell colSpan={8} className="text-center text-gray-400 py-12">
+                      <div className="flex flex-col items-center gap-3">
+                        <FileDown className="w-16 h-16 text-gray-300" />
+                        <p className="text-xl font-semibold">No scraping requests found</p>
+                        <p className="text-gray-500">Start a new scraping request above</p>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : (
-                  displayRequests.map((request) => (
+                  displayRequests.map((request, index) => (
                     <TableRow
                       key={request.id}
-                      className="hover:bg-gray-100 transition-colors cursor-pointer"
+                      className={`group hover:bg-gradient-to-r hover:from-[#8b39ea]/5 hover:via-[#137fc8]/5 hover:to-[#1d4ed8]/5 transition-all duration-300 cursor-pointer ${
+                        index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                      }`}
                       title="Click to open search link"
                     >
-                      <TableCell className="font-medium text-blue-800">{request.date}</TableCell>
-                      <TableCell className="text-blue-700">{request.fileName}</TableCell>
-                      <TableCell className="text-blue-600 flex items-center gap-1">
-                        <LinkIcon className="w-4 h-4" />
+                      <TableCell className="font-semibold text-[#137fc8] py-4 group-hover:scale-105 transition-transform duration-300">
+                        {request.date}
+                      </TableCell>
+                      <TableCell className="text-[#8b39ea] font-medium py-4">{request.fileName}</TableCell>
+                      <TableCell className="py-4">
                         <a
                           href={request.link}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="underline hover:text-blue-900"
+                          className="flex items-center gap-2 text-[#137fc8] hover:text-[#1d4ed8] transition-all duration-300 group-hover:gap-3"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          View
+                          <LinkIcon className="w-4 h-4 transition-transform duration-300 group-hover:scale-110" />
+                          <span className="font-medium underline hover:no-underline">View Search</span>
                         </a>
                       </TableCell>
-                      <TableCell>{getStatusBadge(request.status)}</TableCell>
-                      <TableCell className="text-blue-700 font-semibold">{request.requested}</TableCell>
-                      <TableCell className="text-blue-700 font-semibold">{request.extracted}</TableCell>
-                      <TableCell className="text-blue-700 font-semibold">{request.credits}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="py-4">{getStatusBadge(request.status)}</TableCell>
+                      <TableCell className="text-[#8b39ea] font-bold text-lg py-4">{request.requested}</TableCell>
+                      <TableCell className="text-[#137fc8] font-bold text-lg py-4">{request.extracted}</TableCell>
+                      <TableCell className="text-[#1d4ed8] font-bold text-lg py-4">{request.credits}</TableCell>
+                      <TableCell className="text-right py-4">
                         {request.status === "completed" && request.downloadLink ? (
                           <a
                             href={request.downloadLink}
@@ -412,13 +505,15 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
                             aria-label={`Download ${request.fileName}`}
-                            className="inline-flex items-center justify-center p-1 hover:bg-blue-50 hover:text-blue-700 rounded transition-transform transform hover:scale-125"
+                            className="inline-flex items-center justify-center p-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-full hover:from-green-600 hover:to-green-700 transition-all duration-300 transform hover:scale-110 shadow-lg hover:shadow-xl"
                             download={request.fileName}
                           >
                             <Download className="w-5 h-5" />
                           </a>
                         ) : (
-                          <span className="text-sm text-gray-400">-</span>
+                          <div className="inline-flex items-center justify-center p-3 bg-gray-200 rounded-full">
+                            <Download className="w-5 h-5 text-gray-400" />
+                          </div>
                         )}
                       </TableCell>
                     </TableRow>
@@ -428,30 +523,34 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
             </Table>
           </div>
 
+          {/* Pagination Controls */}
           {showAll && totalPages > 1 && (
-            <div className="flex justify-center items-center mt-4 gap-2">
-              <button
+            <div className="flex justify-center items-center mt-6 gap-3">
+              <Button
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+                className="bg-gradient-to-r from-[#8b39ea] to-[#137fc8] text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105"
+                size="sm"
               >
                 Previous
-              </button>
-              <span className="text-gray-700">
+              </Button>
+              <span className="text-[#1d4ed8] font-semibold px-4 py-2 bg-gradient-to-r from-[#8b39ea]/10 to-[#137fc8]/10 rounded-lg">
                 Page {currentPage} of {totalPages}
               </span>
-              <button
+              <Button
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-                className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+                className="bg-gradient-to-r from-[#137fc8] to-[#1d4ed8] text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105"
+                size="sm"
               >
                 Next
-              </button>
+              </Button>
             </div>
           )}
 
-          <div className="mt-4 flex justify-center">
-            <button
+          {/* Show More/Less Toggle */}
+          <div className="mt-6 flex justify-center">
+            <Button
               onClick={() => {
                 if (!showAll) {
                   setShowAll(true);
@@ -460,10 +559,10 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
                   setShowAll(false);
                 }
               }}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              className="bg-gradient-to-r from-[#8b39ea] via-[#137fc8] to-[#1d4ed8] text-white font-bold shadow-2xl transition-all duration-500 py-4 px-8 transform hover:scale-105"
             >
-              {showAll ? "Show Less" : "View All"}
-            </button>
+              {showAll ? "Show Less" : "View All Requests"}
+            </Button>
           </div>
         </CardContent>
       </Card>

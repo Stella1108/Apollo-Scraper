@@ -21,7 +21,7 @@ interface NinjaVerifierResponse {
   error?: string;
 }
 
-// Cache token for 24 hours
+// Enhanced token caching with better error handling
 let cachedToken: { token: string; expiry: number } | null = null;
 
 async function getToken(): Promise<string> {
@@ -31,7 +31,7 @@ async function getToken(): Promise<string> {
     throw new Error("Email verification service is not configured properly");
   }
 
-  // Return cached token if valid
+  // Return cached token if valid (22 hours cache)
   if (cachedToken && Date.now() < cachedToken.expiry) {
     console.log("🔑 Using cached token");
     return cachedToken.token;
@@ -42,7 +42,7 @@ async function getToken(): Promise<string> {
     const tokenResponse = await fetch(`${TOKEN_URL}${apiKey}`, {
       method: 'GET',
       headers: {
-        'User-Agent': 'EmailVerifier/1.0',
+        'User-Agent': 'EmailVerifier/2.0',
         'Accept': 'application/json',
       }
     });
@@ -59,10 +59,10 @@ async function getToken(): Promise<string> {
 
     console.log("✅ Token acquired successfully");
 
-    // Cache token for 23 hours (with 1 hour buffer)
+    // Cache token for 22 hours
     cachedToken = {
       token: tokenData.token,
-      expiry: Date.now() + 23 * 60 * 60 * 1000
+      expiry: Date.now() + 22 * 60 * 60 * 1000
     };
 
     return tokenData.token;
@@ -72,14 +72,14 @@ async function getToken(): Promise<string> {
   }
 }
 
-// Enhanced batch processing with better error handling
+// Enhanced batch processing with 10 concurrent requests
 async function processEmailsConcurrently(emails: string[], token: string): Promise<VerificationResult[]> {
-  const CONCURRENT_REQUESTS = 5; // Reduced for better stability and rate limiting
+  const CONCURRENT_REQUESTS = 10;
   const results: VerificationResult[] = [];
   
   console.log(`🔄 Processing ${emails.length} emails with concurrency ${CONCURRENT_REQUESTS}`);
   
-  // Process in concurrent groups
+  // Process in concurrent groups of 10
   for (let i = 0; i < emails.length; i += CONCURRENT_REQUESTS) {
     const batch = emails.slice(i, i + CONCURRENT_REQUESTS);
     const batchNumber = Math.floor(i / CONCURRENT_REQUESTS) + 1;
@@ -87,7 +87,7 @@ async function processEmailsConcurrently(emails: string[], token: string): Promi
     console.log(`📦 Processing batch ${batchNumber}/${Math.ceil(emails.length / CONCURRENT_REQUESTS)}`);
 
     const batchPromises = batch.map(email => 
-      verifySingleEmailWithRetry(email, token, 3) // Increased to 3 retries
+      verifySingleEmailWithRetry(email, token, 2)
     );
 
     try {
@@ -103,9 +103,9 @@ async function processEmailsConcurrently(emails: string[], token: string): Promi
         }
       });
       
-      // More conservative delay between batches to respect rate limits
+      // Conservative delay between batches to respect rate limits
       if (i + CONCURRENT_REQUESTS < emails.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+        await new Promise(resolve => setTimeout(resolve, 1500));
       }
     } catch (error) {
       console.error(`❌ Batch ${batchNumber} failed:`, error);
@@ -123,7 +123,7 @@ async function processEmailsConcurrently(emails: string[], token: string): Promi
 async function verifySingleEmailWithRetry(
   email: string, 
   token: string, 
-  maxRetries: number = 3
+  maxRetries: number = 2
 ): Promise<VerificationResult> {
   const firstName = extractFirstNameFromEmail(email);
   
@@ -145,12 +145,12 @@ async function verifySingleEmailWithRetry(
       const timeoutId = setTimeout(() => {
         controller.abort();
         console.log(`⏰ Timeout for ${email} on attempt ${attempt}`);
-      }, 15000); // Increased to 15s timeout
+      }, 10000);
 
       const response = await fetch(url, {
         signal: controller.signal,
         headers: {
-          'User-Agent': 'EmailVerifier/1.0',
+          'User-Agent': 'EmailVerifier/2.0',
           'Accept': 'application/json',
           'Cache-Control': 'no-cache'
         }
@@ -188,7 +188,6 @@ async function verifySingleEmailWithRetry(
     }
   }
 
-  // This should never be reached due to the above logic, but for safety:
   return createResult(email, firstName, "md", "max_retries_exceeded");
 }
 
@@ -254,7 +253,7 @@ function extractFirstNameFromEmail(email: string): string {
   
   // Remove numbers and special characters, then take first part
   const namePart = localPart.replace(/[0-9_\-\.]/g, ' ').split(' ')[0];
-  return namePart || localPart.slice(0, 10); // Fallback to first 10 chars of local part
+  return namePart || localPart.slice(0, 10);
 }
 
 function arrayToCSV(data: VerificationResult[]): string {
@@ -346,13 +345,13 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ ${validEmails.length} valid emails after filtering`);
 
-    // Limit for performance and cost
-    if (validEmails.length > 50) {
+    // Limit for performance and cost - increased to 100
+    if (validEmails.length > 100) {
       return new Response(
         JSON.stringify({ 
           success: false,
-          message: "Maximum 50 emails allowed per request for performance reasons",
-          maxAllowed: 50,
+          message: "Maximum 100 emails allowed per request for performance reasons",
+          maxAllowed: 100,
           provided: validEmails.length
         }), {
           status: 400,
@@ -384,7 +383,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Process emails with high concurrency
+    // Process emails with 10 concurrent requests
     const results = await processEmailsConcurrently(validEmails, token);
     
     const csvString = arrayToCSV(results);
@@ -452,7 +451,8 @@ export async function GET(request: NextRequest) {
       status: "healthy",
       service: "Email Verification API",
       timestamp: new Date().toISOString(),
-      version: "2.0.0"
+      version: "2.0.0",
+      batchSize: 10
     }), {
       status: 200,
       headers: {

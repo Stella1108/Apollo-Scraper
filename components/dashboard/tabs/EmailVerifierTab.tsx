@@ -530,8 +530,8 @@ export function EmailVerifierTab({ user }: EmailVerifierTabProps) {
       <div className="text-left">
         <div className="flex items-center gap-3 mb-3">
           <div className="relative">
-            <div className="absolute -inset-1 bg-gradient-to-r from-[#8b39ea] to-[#137fc8] rounded-lg blur opacity-1"></div>
-            <ShieldCheck className="w-12 h-12 text-[#8b39ea] relative z-10" />
+            <div className="absolute -inset-1 "></div>
+   
           </div>
           <div>
             <h2 className={gradientTextClass}>Professional Email Verifier</h2>
