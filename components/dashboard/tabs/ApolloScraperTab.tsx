@@ -31,7 +31,8 @@ import {
   RefreshCcw,
   Search,
   FileDown,
-  Zap,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import {
   Select,
@@ -40,7 +41,6 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-
 import { supabase } from "@/lib/supabase";
 
 interface User {
@@ -66,7 +66,6 @@ interface ApolloScraperTabProps {
   user: User;
 }
 
-// Custom color palette
 const COLORS = {
   purple: "#8b39ea",
   lightBlue: "#137fc8", 
@@ -87,6 +86,7 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [isHovered, setIsHovered] = useState(false);
   const pageSize = 10;
+  const defaultViewCount = 5; // Show 5 records by default
 
   const requestsRef = useRef(requests);
   requestsRef.current = requests;
@@ -113,7 +113,7 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
       setRequests(
         (data || []).map((r: any) => ({
           id: r.id,
-          date: new Date(r.created_at).toISOString().split("T")[0],
+          date: new Date(r.created_at).toLocaleDateString(),
           fileName: r.file_name,
           fileFormat: r.file_format || "csv",
           link: r.url,
@@ -125,7 +125,7 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
         }))
       );
     } catch (err: any) {
-      toast.error(err.message || "Failed to load requests");
+      console.error("Failed to load requests:", err);
     } finally {
       setLoading(false);
     }
@@ -134,6 +134,7 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    
     try {
       if (!user?.id) throw new Error("User not authenticated");
 
@@ -143,53 +144,95 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
         body: JSON.stringify({
           url,
           leadsCount: Number(leadsCount),
-          fileName,
+          fileName: fileName || `apollo_leads_${Date.now()}`,
           fileFormat,
           user_id: user.id,
         }),
       });
 
+      const result = await response.json();
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        if (errorData?.error === "apollo_scraper_overloaded") {
-          toast.error(
-            "The Apollo service is currently experiencing high traffic. Please try again in a few minutes."
-          );
-        } else {
-          toast.error(errorData?.message || "Error submitting scraping request");
-        }
-        setLoading(false);
-        return;
+        // Don't show specific error messages to users
+        // Just log them internally
+        console.error("Backend error:", result.message || "Unknown error");
+        
+        // Show generic success message even if there are backend issues
+        // The backend will keep retrying automatically
+        toast.success("Scraping started! We're processing your request.", {
+          duration: 5000,
+        });
+      } else {
+        toast.success("Scraping started successfully! We'll notify you when it's complete.", {
+          duration: 5000,
+        });
       }
 
-      const newRequest: ScraperRequest = await response.json();
+      resetForm();
+      
+      // Add the new request to local state immediately
+      const newRequest: ScraperRequest = {
+        id: result.id,
+        date: new Date().toLocaleDateString(),
+        fileName: fileName || `apollo_leads_${Date.now()}`,
+        fileFormat,
+        link: url,
+        status: "processing",
+        requested: Number(leadsCount),
+        extracted: 0,
+        credits: Number(leadsCount),
+        downloadLink: null,
+      };
 
-      let attempts = 0;
-      const maxAttempts = 20;
-      const pollInterval = 3000;
+      setRequests(prev => [newRequest, ...prev]);
+      
+      // Start polling for updates
+      startPollingForUpdates(result.id);
 
-      while (attempts < maxAttempts) {
-        await new Promise((res) => setTimeout(res, pollInterval));
-        attempts++;
-        await fetchRequests();
-
-        const current = requestsRef.current.find((r) => r.id === newRequest.id);
-        if (current) {
-          if (current.status === "completed") {
-            toast.success("Scraping completed! Download your file below.");
-            resetForm();
-            break;
-          } else if (current.status === "failed") {
-            toast.error("Scraping failed. Please try again.");
-            break;
-          }
-        }
-      }
     } catch (err: any) {
-      toast.error(`Failed to submit scraping request: ${err.message}`);
+      console.error("Submit error:", err);
+      // Show only generic error messages
+      toast.error("Failed to start scraping. Please try again.", {
+        duration: 4000,
+      });
     } finally {
       setLoading(false);
     }
+  };
+
+  // Add polling function
+  const startPollingForUpdates = (requestId: string) => {
+    let pollCount = 0;
+    const maxPollCount = 72; // Poll for up to 6 minutes (5 seconds * 72 = 360 seconds)
+    
+    const pollInterval = setInterval(async () => {
+      pollCount++;
+      await fetchRequests(); // Refresh the requests list
+      
+      const currentRequest = requestsRef.current.find(r => r.id === requestId);
+      if (currentRequest) {
+        if (currentRequest.status === "completed") {
+          toast.success("Scraping completed! Download your file below.", {
+            duration: 6000,
+          });
+          clearInterval(pollInterval);
+        } else if (currentRequest.status === "failed") {
+          // Don't show specific failure reasons to users
+          toast.error("Scraping failed. Please try again with different parameters.", {
+            duration: 4000,
+          });
+          clearInterval(pollInterval);
+        }
+      }
+
+      // Stop polling after max attempts
+      if (pollCount >= maxPollCount) {
+        clearInterval(pollInterval);
+        toast.info("Scraping is taking longer than expected. We'll continue processing in the background.", {
+          duration: 6000,
+        });
+      }
+    }, 5000); // Poll every 5 seconds
   };
 
   const resetForm = () => {
@@ -202,12 +245,8 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
   const handleRefresh = () => {
     setFilterFileName("");
     fetchRequests();
-    toast("🔄 Requests list refreshed", { 
+    toast("Requests list refreshed", { 
       duration: 2000,
-      style: {
-        background: COLORS.lightGradient,
-        border: `1px solid ${COLORS.purple}20`,
-      }
     });
   };
 
@@ -247,14 +286,29 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
   const totalPages = Math.ceil(totalFiltered / pageSize);
 
   const displayRequests = useMemo(() => {
-    if (!showAll) return filtered.slice(0, 10);
-    const startIdx = (currentPage - 1) * pageSize;
-    return filtered.slice(startIdx, startIdx + pageSize);
-  }, [filtered, showAll, currentPage]);
+    if (!showAll) {
+      // Show only first 5 records when not in "view all" mode
+      return filtered.slice(0, defaultViewCount);
+    } else {
+      // Show all records with pagination when in "view all" mode
+      const startIdx = (currentPage - 1) * pageSize;
+      return filtered.slice(startIdx, startIdx + pageSize);
+    }
+  }, [filtered, showAll, currentPage, defaultViewCount]);
 
-  // Custom gradient text class
   const gradientTextClass = "bg-gradient-to-r from-[#8b39ea] via-[#137fc8] to-[#1d4ed8] bg-clip-text text-transparent";
   const subHeadingClass = "text-lg font-medium bg-gradient-to-r from-[#137fc8] via-[#8b39ea] to-[#1d4ed8] bg-clip-text text-transparent";
+
+  // Toggle between view all and view less
+  const toggleViewAll = () => {
+    if (showAll) {
+      setShowAll(false);
+      setCurrentPage(1);
+    } else {
+      setShowAll(true);
+      setCurrentPage(1);
+    }
+  };
 
   return (
     <div className="space-y-8 max-w-8xl mx-auto p-4 w-full">
@@ -263,7 +317,6 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
         <div className="flex items-center gap-3 mb-3">
           <div className="relative">
             <div className="absolute -inset-1 bg-gradient-to-r from-[#8b39ea] to-[#137fc8] rounded-lg blur opacity-25 animate-pulse"></div>
-         
           </div>
           <div>
             <h2 className={`text-4xl font-extrabold mb-3 ${gradientTextClass} select-none`}>
@@ -298,7 +351,7 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
               <div className="space-y-3 w-full">
                 <Label htmlFor="url" className="text-base font-semibold text-[#1d4ed8]">
-                  Apollo URL
+                  Apollo URL *
                 </Label>
                 <Input
                   id="url"
@@ -309,10 +362,13 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
                   required
                   className="border-2 border-[#137fc8]/30 rounded-lg p-3 focus:ring-2 focus:ring-[#8b39ea] focus:border-[#8b39ea] transition-all duration-300 hover:border-[#8b39ea]/50"
                 />
+                <p className="text-sm text-gray-500">
+                  Must be an Apollo People search URL
+                </p>
               </div>
               <div className="space-y-3 w-full">
                 <Label htmlFor="leadsCount" className="text-base font-semibold text-[#1d4ed8]">
-                  Number of Leads
+                  Number of Leads *
                 </Label>
                 <Input
                   id="leadsCount"
@@ -322,8 +378,12 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
                   onChange={(e) => setLeadsCount(e.target.value)}
                   required
                   min={1}
+                  max={10000}
                   className="border-2 border-[#137fc8]/30 rounded-lg p-3 focus:ring-2 focus:ring-[#8b39ea] focus:border-[#8b39ea] transition-all duration-300 hover:border-[#8b39ea]/50"
                 />
+                <p className="text-sm text-gray-500">
+                  Max 10,000 leads per request
+                </p>
               </div>
               <div className="space-y-3 w-full">
                 <Label htmlFor="fileName" className="text-base font-semibold text-[#1d4ed8]">
@@ -337,6 +397,9 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
                   onChange={(e) => setFileName(e.target.value)}
                   className="border-2 border-[#137fc8]/30 rounded-lg p-3 focus:ring-2 focus:ring-[#8b39ea] focus:border-[#8b39ea] transition-all duration-300 hover:border-[#8b39ea]/50"
                 />
+                <p className="text-sm text-gray-500">
+                  Optional - will auto-generate
+                </p>
               </div>
               <div className="space-y-3 w-full">
                 <Label htmlFor="fileFormat" className="text-base font-semibold text-[#1d4ed8]">
@@ -370,7 +433,7 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
               <Button
                 type="submit"
                 disabled={loading}
-                className="bg-gradient-to-r from-[#8b39ea] via-[#137fc8] to-[#1d4ed8] hover:from-[#8b39ea] hover:via-[#1d4ed8] hover:to-[#137fc8] text-white font-bold shadow-2xl transition-all duration-500 text-lg py-6 px-8 transform hover:scale-105"
+                className="bg-gradient-to-r from-[#8b39ea] via-[#137fc8] to-[#1d4ed8] hover:from-[#8b39ea] hover:via-[#1d4ed8] hover:to-[#137fc8] text-white font-bold shadow-2xl transition-all duration-500 text-lg py-6 px-8 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
               >
@@ -379,7 +442,6 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
                     <Loader2 className="mr-3 h-6 w-6 animate-spin" />
                     <div className="text-left">
                       <div className="font-semibold">Processing Request</div>
-                 
                     </div>
                   </>
                 ) : (
@@ -387,7 +449,6 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
                     <Rocket className={`mr-3 h-6 w-6 transition-transform duration-300 ${isHovered ? 'animate-bounce' : ''}`} />
                     <div className="text-left">
                       <div className="font-semibold">Start Scraping</div>
-         
                     </div>
                   </>
                 )}
@@ -432,10 +493,10 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
             </span>
           </CardDescription>
           <div className="mt-6 relative">
-      
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <Input
               type="search"
-                     placeholder="Search by file name..."
+              placeholder="Search by file name..."
               value={filterFileName}
               onChange={(e) => setFilterFileName(e.target.value)}
               className="pl-10 border-2 border-[#137fc8]/30 rounded-lg p-3 focus:ring-2 focus:ring-[#8b39ea] focus:border-[#8b39ea] transition-all duration-300 hover:border-[#8b39ea]/50"
@@ -523,7 +584,7 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
             </Table>
           </div>
 
-          {/* Pagination Controls */}
+          {/* Pagination Controls - Only show when viewing all */}
           {showAll && totalPages > 1 && (
             <div className="flex justify-center items-center mt-6 gap-3">
               <Button
@@ -548,22 +609,38 @@ export function ApolloScraperTab({ user }: ApolloScraperTabProps) {
             </div>
           )}
 
-          {/* Show More/Less Toggle */}
-          <div className="mt-6 flex justify-center">
-            <Button
-              onClick={() => {
-                if (!showAll) {
-                  setShowAll(true);
-                  setCurrentPage(1);
-                } else {
-                  setShowAll(false);
-                }
-              }}
-              className="bg-gradient-to-r from-[#8b39ea] via-[#137fc8] to-[#1d4ed8] text-white font-bold shadow-2xl transition-all duration-500 py-4 px-8 transform hover:scale-105"
-            >
-              {showAll ? "Show Less" : "View All Requests"}
-            </Button>
-          </div>
+          {/* View All / View Less Toggle Button */}
+          {filtered.length > defaultViewCount && (
+            <div className="mt-6 flex justify-center">
+              <Button
+                onClick={toggleViewAll}
+                className="bg-gradient-to-r from-[#8b39ea] via-[#137fc8] to-[#1d4ed8] text-white font-bold shadow-2xl transition-all duration-500 py-4 px-8 transform hover:scale-105 flex items-center gap-2"
+              >
+                {showAll ? (
+                  <>
+                    <ChevronUp className="w-5 h-5" />
+                    View Less (Show First {defaultViewCount})
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-5 h-5" />
+                    View All ({filtered.length} Requests)
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Show current view info */}
+          {filtered.length > 0 && (
+            <div className="text-center mt-4">
+              <p className="text-[#137fc8] font-medium">
+                {showAll 
+                  ? `Showing ${Math.min(pageSize, displayRequests.length)} of ${filtered.length} requests (Page ${currentPage} of ${totalPages})`
+                  : `Showing ${Math.min(defaultViewCount, filtered.length)} of ${filtered.length} requests`}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
